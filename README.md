@@ -1,4 +1,4 @@
-# openifs
+# OpenIFS
 
 This respository contains the instructions and code for building the controlling application used for controlling the OpenIFS code in the climateprediction.net project.
 
