@@ -10,7 +10,7 @@ g++ openifs_0.1.cpp -I./boinc -I./boinc/lib -L./boinc/api -L./boinc/lib -L./boin
 
 This will create an executable that is the app that is imported into the BOINC environment alongside the OpenIFS executable.
 
-Now to run this the OpenIFS files will need to be alongside. An example command:
+Now to run this the OpenIFS ancillary files along with the OpenIFS executable will need to be alongside, the command to run this in standalone mode is:
 
 ./openifs_0.1_x86_64-pc-linux-gnu gw3a 0 0.1 00001
 
