@@ -33,3 +33,15 @@ DR_HOOK_HEAPCHECK=no
 DR_HOOK_STACKCHECK=no
 
 OMP_STACKSIZE=128M
+
+OIFS_RUN=1 (run number)
+
+OIFS_RES=159 (model resolution)
+
+NPROC=8 (number of MPI tasks)
+
+NTHREADS=1 (default number of OPENMP threads)
+
+NAMELIST=fort.4 (NAMELIST file);
+TIMESTEP=3600 (size of the timestep);
+FCLEN=d1 (number of days of the model run);
