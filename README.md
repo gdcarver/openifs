@@ -12,7 +12,7 @@ This will create an executable that is the app that is imported into the BOINC e
 
 Now to run this the OpenIFS files will need to be alongside. An example command:
 
-./openifs_0.1_x86_64-pc-linux-gnu gw3a 0 0.4 00001
+./openifs_0.1_x86_64-pc-linux-gnu gw3a 0 0.1 00001
 
 The command line parameters: [1] compiled executable, [2] experiment id, [3] batch id, [4] app version id, [5] workunit id.
 
