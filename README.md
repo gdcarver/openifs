@@ -18,7 +18,7 @@ The command line parameters: [1] compiled executable, [2] experiment id, [3] bat
 
 The current version of OpenIFS this supports is: oifs40r1. The OpenIFS code is compiled separately and is installed alongside the OpenIFS controller in BOINC. To upgrade the controller code in the future to later versions of OpenIFS consideration will need to be made whether there are any changes to the command line parameters the compiled version of OpenIFS takes in, and whether there are changes to the structure and content of the supporting ancillary files.
 
-Currently in the control code the following variables are fixed:
+Currently in the control code the following variables are fixed (this will change with further development):
 
 OIFS_DUMMY_ACTION=abort
 
@@ -42,7 +42,8 @@ NPROC=8 (number of MPI tasks)
 
 NTHREADS=1 (default number of OPENMP threads)
 
-NAMELIST=fort.4 (NAMELIST file)\n
+NAMELIST=fort.4 (NAMELIST file)
+
 TIMESTEP=3600 (size of the timestep)
 
 FCLEN=d1 (number of days of the model run)
