@@ -42,6 +42,7 @@ NPROC=8 (number of MPI tasks)
 
 NTHREADS=1 (default number of OPENMP threads)
 
-NAMELIST=fort.4 (NAMELIST file);
-TIMESTEP=3600 (size of the timestep);
-FCLEN=d1 (number of days of the model run);
+NAMELIST=fort.4 (NAMELIST file)\n
+TIMESTEP=3600 (size of the timestep)
+
+FCLEN=d1 (number of days of the model run)
