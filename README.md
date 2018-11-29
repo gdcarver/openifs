@@ -18,4 +18,11 @@ The command line parameters: [1] compiled executable, [2] experiment id, [3] bat
 
 The current version of OpenIFS this supports is: oifs40r1. The OpenIFS code is compiled separately and is installed alongside the OpenIFS controller in BOINC. To upgrade the controller code in the future to later versions of OpenIFS consideration will need to be made whether there are any changes to the command line parameters the compiled version of OpenIFS takes in, and whether there are changes to the structure and content of the supporting ancillary files.
 
-
+Currently in the control code the following variables are fixed:
+export OIFS_DUMMY_ACTION=abort\\
+export OMP_NUM_THREADS=1
+export OMP_SCHEDULE=STATIC
+export DR_HOOK=1
+export DR_HOOK_HEAPCHECK=no
+export DR_HOOK_STACKCHECK=no
+export OMP_STACKSIZE=128M
