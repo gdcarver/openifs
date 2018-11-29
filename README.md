@@ -15,3 +15,10 @@ Now to run this the OpenIFS files will need to be alongside. An example command:
 ./openifs_0.4_x86_64-pc-linux-gnu gw3a 0 0.4 00001
 
 Command line parameters: [2] experiment id, [3] batch id, [4] version id, [5] workunit id.
+
+The current version of OpenIFS this supports is: oifs40r1
+This code is compiled separately and is installed alongside the OpenIFS controller in BOINC. 
+
+To upgrade this controller code in the future to later versions of OpenIFS consideration will need to be whether there are changes to the command line parameters the compiled version of OpenIFS takes in, and whether there are changes to the structure of the supporting ancillary files.
+
+
