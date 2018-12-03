@@ -10,9 +10,9 @@ g++ openifs.cpp -I./boinc -I./boinc/lib -L./boinc/api -L./boinc/lib -L./boinc/zi
 
 This will create an executable that is the app that is imported into the BOINC environment alongside the OpenIFS executable. Now to run this the OpenIFS ancillary files along with the OpenIFS executable will need to be alongside, the command to run this in standalone mode is:
 
-./openifs_0.1_x86_64-pc-linux-gnu gw3a 0 0.1 00001
+./openifs_0.1_x86_64-pc-linux-gnu gw3a 0.1 00001
 
-The command line parameters: [1] compiled executable, [2] experiment id, [3] batch id, [4] app version id, [5] workunit id.
+The command line parameters: [1] compiled executable, [2] experiment id, [3] app version id, [4] workunit id.
 
 The current version of OpenIFS this supports is: oifs40r1. The OpenIFS code is compiled separately and is installed alongside the OpenIFS controller in BOINC. To upgrade the controller code in the future to later versions of OpenIFS consideration will need to be made whether there are any changes to the command line parameters the compiled version of OpenIFS takes in, and whether there are changes to the structure and content of the supporting ancillary files.
 
@@ -34,14 +34,8 @@ OMP_STACKSIZE=128M
 
 OIFS_RUN=1 (run number)
 
-OIFS_RES=159 (model resolution)
-
 NPROC=8 (number of MPI tasks)
 
 NTHREADS=1 (default number of OPENMP threads)
 
 NAMELIST=fort.4 (NAMELIST file)
-
-TIMESTEP=3600 (size of the timestep)
-
-FCLEN=d1 (number of days of the model run)
