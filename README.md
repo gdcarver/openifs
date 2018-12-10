@@ -10,9 +10,9 @@ g++ openifs.cpp -I./boinc -I./boinc/lib -L./boinc/api -L./boinc/lib -L./boinc/zi
 
 This will create an executable that is the app that is imported into the BOINC environment alongside the OpenIFS executable. Now to run this the OpenIFS ancillary files along with the OpenIFS executable will need to be alongside, the command to run this in standalone mode is:
 
-./openifs_0.1_x86_64-pc-linux-gnu gw3a 0.1 00001
+./openifs_0.1_x86_64-pc-linux-gnu 0.1 gw3a 0001 0 00001
 
-The command line parameters: [1] compiled executable, [2] experiment id, [3] app version id, [4] workunit id.
+The command line parameters: [1] compiled executable, [2] app version id, [3] experiment id, [4] unique member id, [5] batch id, [6] workunit id.
 
 The current version of OpenIFS this supports is: oifs40r1. The OpenIFS code is compiled separately and is installed alongside the OpenIFS controller in BOINC. To upgrade the controller code in the future to later versions of OpenIFS consideration will need to be made whether there are any changes to the command line parameters the compiled version of OpenIFS takes in, and whether there are changes to the structure and content of the supporting ancillary files.
 
