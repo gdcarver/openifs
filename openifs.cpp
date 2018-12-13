@@ -1,7 +1,7 @@
 //
 // Control code for the OpenIFS application in the climateprediction.net project
 //
-// Written by Andy Bowery (Oxford eResearch Centre, Oxford University) November 2018
+// Written by Andy Bowery (Oxford eResearch Centre, Oxford University) December 2018
 //
 
 #include <stdlib.h>
@@ -27,6 +27,7 @@ int main(int argc, char** argv) {
     using namespace std::this_thread;
     using namespace std;
     int retval = 0;
+    char buff[_MAX_PATH];
 
     // Defaults to input arguments
     int OIFS_RUN=1;                   // run number, output will be saved to directory: output$OIFS_RUN
@@ -66,7 +67,7 @@ int main(int argc, char** argv) {
     fprintf(stderr,"current project directory is: %s\n", project_path.c_str());
 
     // Get the slots path (the current working path)
-    char slot_path[256];
+    char slot_path[_MAX_PATH];
     if (getcwd(slot_path, sizeof(slot_path)) == NULL)
       fprintf(stderr,"getcwd() returned an error\n");
     else
@@ -91,11 +92,10 @@ int main(int argc, char** argv) {
     boinc_begin_critical_section();
 
     // Copy apps files to working directory
-    std::string var1 = std::string("cp ") + project_path + \
-                       std::string("openifs_app_") + version + std::string(".zip ") + slot_path;
-    fprintf(stderr, "Copying apps to working directory: %s\n", var1.c_str());
-    fflush(stderr);
-    system(var1.c_str());
+    std::string app_target = project_path + std::string("openifs_app_") + version + std::string(".zip");
+    std::string app_destination = slot_path + std::string("/openifs_app_") + version + std::string(".zip");
+    fprintf(stderr,"Copying: %s to: %s\n",app_target.c_str(),app_destination.c_str());
+    boinc_copy(app_target.c_str(),app_destination.c_str());
 
     // Unzip the app zip file
     std::string app_zip = slot_path + std::string("/openifs_app_") + version + std::string(".zip");
@@ -104,16 +104,14 @@ int main(int argc, char** argv) {
     boinc_zip(UNZIP_IT,app_zip.c_str(),slot_path);
 
     // Make the ifsdata directory
-    std::string ifsdata_folder = slot_path + std::string("/openifs_app/ifsdata");
+    std::string ifsdata_folder = slot_path + std::string("/ifsdata");
     if (mkdir(ifsdata_folder.c_str(),S_IRWXU|S_IRWXG|S_IROTH|S_IXOTH) != 0) fprintf(stderr, "mkdir() ifsdata failed\n");
 
-
     // Copy namelist files to working directory
-    std::string var4 = std::string("cp ") + project_path + \
-                       std::string("openifs_wu_") + wuid + std::string(".zip ") + slot_path;
-    fprintf(stderr, "Copying namelist files to working directory: %s\n", var4.c_str());
-    fflush(stderr);
-    system(var4.c_str());
+    std::string wu_target = project_path + std::string("openifs_wu_") + wuid + std::string(".zip");
+    std::string wu_destination = slot_path + std::string("/openifs_wu_") + wuid + std::string(".zip");
+    fprintf(stderr,"Copying namelist files from: %s to: %s\n",wu_target.c_str(),wu_destination.c_str());
+    boinc_copy(wu_target.c_str(),wu_destination.c_str());
 
     // Unzip the namelist zip file
     std::string namelist_zip = slot_path + std::string("/openifs_wu_") + wuid + std::string(".zip");
@@ -121,31 +119,18 @@ int main(int argc, char** argv) {
     fflush(stderr);
     boinc_zip(UNZIP_IT,namelist_zip.c_str(),slot_path);
 
-    // Move the fort.4 namelist file to app directory
-    std::string var5 = std::string("mv ") + slot_path + std::string("/fort.4 ") + slot_path + std::string("/openifs_app");
-    fprintf(stderr, "Move fort.4 file to app directory: %s\n", var5.c_str());
-    fflush(stderr);
-    system(var5.c_str());
-
-    // Move the wam_namelist file to app directory
-    std::string var6 = std::string("mv ") + slot_path + std::string("/wam_namelist ") + slot_path + std::string("/openifs_app");
-    fprintf(stderr, "Move wam_namelist file to app directory: %s\n", var6.c_str());
-    fflush(stderr);
-    system(var6.c_str());
-
-
     // Parse the fort.4 namelist for the filenames and variables
-    std::string namelist_file = slot_path + std::string("/openifs_app/") + NAMELIST;
-
-    const char strSearch[8][22]={"!GHG_FILE=","!IC_ANCIL_FILE=","!CLIMATE_DATA_FILE=","!WAVE_DATA_FILE=","!HORIZ_RESOLUTION=","!GRID_RESOLUTION=","!FCLEN=","!TIMESTEP="};
-    char* strFind[8] = {NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL};
-    char strCpy[8][_MAX_PATH];
+    std::string namelist_file = slot_path + std::string("/") + NAMELIST;
+    const char strSearch[9][22]={"!GHG_FILE=","!IC_ANCIL_FILE=","!CLIMATE_DATA_FILE=","!WAVE_DATA_FILE=",\
+                                 "!HORIZ_RESOLUTION=","!GRID_RESOLUTION=","!FCLEN=","!TIMESTEP=","!START_DATE="};
+    char* strFind[9] = {NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL};
+    char strCpy[9][_MAX_PATH];
     char strTmp[_MAX_PATH];
-    memset(strCpy,0x00,8*_MAX_PATH);
-    memset(strTmp, 0x00, _MAX_PATH);
+    memset(strCpy,0x00,9*_MAX_PATH);
+    memset(strTmp,0x00,_MAX_PATH);
     FILE* fParse = boinc_fopen(namelist_file.c_str(),"r");
     
-    std::string GHG_FILE, IC_ANCIL_FILE, CLIMATE_DATA_FILE, WAVE_DATA_FILE;
+    std::string GHG_FILE, IC_ANCIL_FILE, CLIMATE_DATA_FILE, WAVE_DATA_FILE, START_DATE;
     int HORIZ_RESOLUTION, GRID_RESOLUTION;
 
     if (fParse) {
@@ -202,7 +187,13 @@ int main(int argc, char** argv) {
                     strcpy(strCpy[7], strFind[7]);
                 }
             }
-            if (strFind[0] && strFind[1] && strFind[2] && strFind[3] && strFind[4] && strFind[5] && strFind[6] && strFind[7]) {
+            if (!strFind[8]) {
+                strFind[8] = strstr(strTmp, strSearch[8]);
+                if (strFind[8]) {
+                    strcpy(strCpy[8], strFind[8]);
+                }
+            }
+            if (strFind[0]&&strFind[1]&&strFind[2]&&strFind[3]&&strFind[4]&&strFind[5]&&strFind[6]&&strFind[7]&&strFind[8]) {
                 break;
             }
        }
@@ -210,7 +201,6 @@ int main(int argc, char** argv) {
        if (strCpy[0][0] != 0x00) {
             memset(strTmp, 0x00, _MAX_PATH);
             strncpy(strTmp, (char*)(strCpy[0] + strlen(strSearch[0])), 100);
-            //std::string GHG_FILE = strTmp; 
             GHG_FILE = strTmp;
             while(!GHG_FILE.empty() && std::isspace(*GHG_FILE.rbegin())) GHG_FILE.erase(GHG_FILE.length()-1);
             fprintf(stderr, "GHG_FILE: %s\n", GHG_FILE.c_str());
@@ -252,16 +242,21 @@ int main(int argc, char** argv) {
             TIMESTEP=atoi(strCpy[7] + strlen(strSearch[7]));
             fprintf(stderr, "TIMESTEP: %i\n", TIMESTEP);
        }
+       if (strCpy[8][0] != 0x00) {
+            memset(strTmp, 0x00, _MAX_PATH);
+            strncpy(strTmp, (char*)(strCpy[8] + strlen(strSearch[8])), 100);
+            START_DATE = strTmp; 
+            while(!START_DATE.empty() && std::isspace(*START_DATE.rbegin())) START_DATE.erase(START_DATE.length()-1);
+            fprintf(stderr, "START_DATE: %s\n", START_DATE.c_str());
+       }
        fclose(fParse);
     }
 
-
     // Copy the IC ancils to working directory
-    std::string var7 = std::string("cp ") + project_path + IC_ANCIL_FILE + \
-                       std::string(".zip ") + slot_path;
-    fprintf(stderr, "Copying IC ancils to working directory: %s\n", var7.c_str());
-    fflush(stderr);
-    system(var7.c_str());
+    std::string ic_ancil_target = project_path + IC_ANCIL_FILE + std::string(".zip");
+    std::string ic_ancil_destination = slot_path + std::string("/") + IC_ANCIL_FILE + std::string(".zip");
+    fprintf(stderr,"Copying IC ancils from: %s to: %s\n",ic_ancil_target.c_str(),ic_ancil_destination.c_str());
+    boinc_copy(ic_ancil_target.c_str(),ic_ancil_destination.c_str());
 
     // Unzip the IC ancils zip file
     std::string var8 = slot_path + std::string("/") + IC_ANCIL_FILE + std::string(".zip");
@@ -269,20 +264,11 @@ int main(int argc, char** argv) {
     fflush(stderr);
     boinc_zip(UNZIP_IT,var8.c_str(),slot_path);
 
-    // Move IC ancils to app directory
-    std::string var9 = std::string("mv ") + slot_path + std::string("/") + IC_ANCIL_FILE + \
-                       std::string("/* ") + slot_path + std::string("/openifs_app");
-    fprintf(stderr, "Move IC ancil to app directory: %s\n",var9.c_str());
-    fflush(stderr);
-    system(var9.c_str());
-
-
     // Copy the wave data file to working directory
-    std::string var10 = std::string("cp ") + project_path + WAVE_DATA_FILE + \
-                        std::string(".zip ") + slot_path;
-    fprintf(stderr, "Copying the wave data file to working directory: %s\n", var10.c_str());
-    fflush(stderr);
-    system(var10.c_str());
+    std::string wave_data_target = project_path + WAVE_DATA_FILE + std::string(".zip");
+    std::string wave_data_destination = slot_path + std::string("/") + WAVE_DATA_FILE + std::string(".zip");
+    fprintf(stderr,"Copying wave data from: %s to: %s\n",wave_data_target.c_str(),wave_data_destination.c_str());
+    boinc_copy(wave_data_target.c_str(),wave_data_destination.c_str());
 
     // Unzip the wave data zip file
     std::string var11 = slot_path + std::string("/") + WAVE_DATA_FILE + std::string(".zip");
@@ -290,67 +276,63 @@ int main(int argc, char** argv) {
     fflush(stderr);
     boinc_zip(UNZIP_IT,var11.c_str(),slot_path);
 
-    // Move wave data files to app directory
-    std::string var12 = std::string("mv ") + slot_path + std::string("/") + WAVE_DATA_FILE + \
-                        std::string("/* ") + slot_path + std::string("/openifs_app");
-    fprintf(stderr, "Moving the wave data files to app directory: %s\n", var12.c_str());
-    fflush(stderr);
-    system(var12.c_str());
-
-
     // Copy the GHG ancils to working directory
-    std::string var13 = std::string("cp ") + project_path + GHG_FILE + \
-                        std::string(".zip ") + slot_path;
-    fprintf(stderr, "Copying GHG ancils to working directory: %s\n", var13.c_str());
-    fflush(stderr);
-    system(var13.c_str());
+    std::string ghg_target = project_path + GHG_FILE + std::string(".zip");
+    std::string ghg_destination = slot_path + std::string("/ifsdata/") + GHG_FILE + std::string(".zip");
+    fprintf(stderr,"Copying GHG ancils from: %s to: %s\n",ghg_target.c_str(),ghg_destination.c_str());
+    boinc_copy(ghg_target.c_str(),ghg_destination.c_str());
+
+    // Change directory to the GHG ancils directory
+    std::string ghg_ancils_dir = slot_path + std::string("/ifsdata/");
+    if (chdir(ghg_ancils_dir.c_str()) != 0) fprintf(stderr, "chdir() failed to: %s\n",ghg_ancils_dir.c_str());
+    fprintf(stderr,"The current directory is: %s\n",getcwd(buff,_MAX_PATH));
 
     // Unzip the GHG ancils zip file
-    std::string ghg_zip = slot_path + std::string("/") + GHG_FILE + std::string(".zip");
+    std::string ghg_zip = slot_path + std::string("/ifsdata/") + GHG_FILE + std::string(".zip");
     fprintf(stderr, "Unzipping GHG ancils zip file: %s\n", ghg_zip.c_str());
     fflush(stderr);
-    boinc_zip(UNZIP_IT,ghg_zip.c_str(),slot_path);
+    boinc_zip(UNZIP_IT,ghg_zip.c_str(),slot_path+std::string("/ifsdata/"));
 
-    // Move GHG ancil files to app directory
-    std::string var15 = std::string("mv ") + slot_path + std::string("/") + GHG_FILE + \
-                        std::string("/* ") + slot_path + std::string("/openifs_app/ifsdata");
-    fprintf(stderr, "Moving GHG ancils to app directory: %s\n", var15.c_str());
-    fflush(stderr);
-    system(var15.c_str());
-
-
-    // Copy the climate data file to working directory
-    std::string var16 = std::string("cp ") + project_path + CLIMATE_DATA_FILE + \
-                        std::string(".zip ") + slot_path;
-    fprintf(stderr, "Copying the climate data file to working directory: %s\n", var16.c_str());
-    fflush(stderr);
-    system(var16.c_str());
-
-    // Unzip the climate data zip file
-    std::string climate_zip = slot_path + std::string("/") + CLIMATE_DATA_FILE + std::string(".zip");
-    fprintf(stderr, "Unzipping the climate data zip file: %s\n", climate_zip.c_str());
-    fflush(stderr);
-    boinc_zip(UNZIP_IT,climate_zip.c_str(),slot_path);
+    // Change directory back to the slots directory
+    if (chdir(slot_path) != 0) fprintf(stderr, "chdir() failed to: %s\n",slot_path);
+    fprintf(stderr,"The current directory is: %s\n",getcwd(buff,_MAX_PATH));
 
     // Make the climate data directory
-    std::string var18 = slot_path + std::string("/openifs_app/") + \
+    std::string var18 = slot_path + std::string("/") + \
                        std::to_string(HORIZ_RESOLUTION) + std::string("l_") + std::to_string(GRID_RESOLUTION);
     if (mkdir(var18.c_str(),S_IRWXU|S_IRWXG|S_IROTH|S_IXOTH) != 0) fprintf(stderr, "mkdir() climate data failed\n");
 
-    // Move climate data files to app directory
-    std::string var19 = std::string("mv ") + slot_path + std::string("/") + CLIMATE_DATA_FILE + \
-                        std::string("/* ") + slot_path + std::string("/openifs_app/") + \
-                        std::to_string(HORIZ_RESOLUTION) + std::string("l_") + std::to_string(GRID_RESOLUTION);
-    fprintf(stderr, "Moving the climate data files to app directory: %s\n", var19.c_str());
-    fflush(stderr);
-    system(var19.c_str());
+    // Copy the climate data file to working directory
+    std::string climate_data_target = project_path + CLIMATE_DATA_FILE + std::string(".zip");
+    std::string climate_data_destination = slot_path + std::string("/") + \
+                                           std::to_string(HORIZ_RESOLUTION) + std::string("l_") + std::to_string(GRID_RESOLUTION) + \
+                                           std::string("/") + CLIMATE_DATA_FILE + std::string(".zip");
+    fprintf(stderr,"Copying climate data file from: %s to: %s\n",climate_data_target.c_str(),climate_data_destination.c_str());
+    boinc_copy(climate_data_target.c_str(),climate_data_destination.c_str());
 
+    // Change directory to the climate data directory
+    std::string clim_data_dir = slot_path + std::string("/") + \
+                                std::to_string(HORIZ_RESOLUTION) + std::string("l_") + std::to_string(GRID_RESOLUTION);
+    if (chdir(clim_data_dir.c_str()) != 0) fprintf(stderr, "chdir() failed to: %s\n",clim_data_dir.c_str());
+    fprintf(stderr,"The current directory is: %s\n",getcwd(buff,_MAX_PATH));
+
+    // Unzip the climate data zip file
+    std::string climate_zip = slot_path + std::string("/") + \
+                              std::to_string(HORIZ_RESOLUTION) + std::string("l_") + std::to_string(GRID_RESOLUTION) + \
+                              std::string("/") + CLIMATE_DATA_FILE + std::string(".zip");
+    fprintf(stderr, "Unzipping the climate data zip file: %s\n", climate_zip.c_str());
+    fflush(stderr);
+    boinc_zip(UNZIP_IT,climate_zip.c_str(),slot_path+std::string("/")+std::to_string(HORIZ_RESOLUTION)+std::string("l_")+std::to_string(GRID_RESOLUTION));
+
+    // Change directory back to the slots directory
+    if (chdir(slot_path) != 0) fprintf(stderr, "chdir() failed to: %s\n",slot_path);
+    fprintf(stderr,"The current directory is: %s\n",getcwd(buff,_MAX_PATH));
 
     char *pathvar;
     // Set the GRIB_SAMPLES_PATH environmental variable
-    std::string var20 = std::string("GRIB_SAMPLES_PATH=") + slot_path + \
-                        std::string("/openifs_app/eccodes/ifs_samples/grib1_mlgrib2");
-    if (putenv((char *)var20.c_str())) {
+    std::string GRIB_SAMPLES_var = std::string("GRIB_SAMPLES_PATH=") + slot_path + \
+                                   std::string("/eccodes/ifs_samples/grib1_mlgrib2");
+    if (putenv((char *)GRIB_SAMPLES_var.c_str())) {
       fprintf(stderr, "putenv failed \n");
       return 1;
     }
@@ -358,9 +340,9 @@ int main(int argc, char** argv) {
     fprintf(stderr, "The current GRIB_SAMPLES_PATH is: %s\n", pathvar);
 
     // Set the GRIB_DEFINITION_PATH environmental variable
-    std::string var21 = std::string("GRIB_DEFINITION_PATH=") + slot_path + \
-                        std::string("/openifs_app/eccodes/definitions");
-    if (putenv((char *)var21.c_str())) {
+    std::string GRIB_DEF_var = std::string("GRIB_DEFINITION_PATH=") + slot_path + \
+                               std::string("/eccodes/definitions");
+    if (putenv((char *)GRIB_DEF_var.c_str())) {
       fprintf(stderr, "putenv failed \n");
       return 1;
     }
@@ -368,19 +350,15 @@ int main(int argc, char** argv) {
     fprintf(stderr, "The current GRIB_DEFINITION_PATH is: %s\n", pathvar);
 
     // Change permissions on the app directory
-    std::string var22 = std::string("chmod -R 777 ") + slot_path + std::string("/openifs_app");
-    fprintf(stderr, "Changing permissions: %s\n", var22.c_str());
+    std::string change_permission = std::string("chmod -R 777 ") + slot_path;
+    fprintf(stderr, "Changing permissions: %s\n", change_permission.c_str());
     fflush(stderr);
-    system(var22.c_str());
-
-    // Change directory to the app directory
-    std::string var23 = slot_path + std::string("/openifs_app/");
-    if (chdir(var23.c_str()) != 0) fprintf(stderr, "chdir() failed to: %s\n",var23.c_str());
+    system(change_permission.c_str());
 
     // Set the OIFS_DUMMY_ACTION environmental variable, this controls what OpenIFS does if it goes into a dummy subroutine
     // Possible values are: 'quiet', 'verbose' or 'abort'
-    std::string var24 = std::string("OIFS_DUMMY_ACTION=abort");
-    if (putenv((char *)var24.c_str())) {
+    std::string OIFS_var = std::string("OIFS_DUMMY_ACTION=abort");
+    if (putenv((char *)OIFS_var.c_str())) {
       fprintf(stderr, "putenv failed \n");
       return 1;
     }
@@ -388,8 +366,8 @@ int main(int argc, char** argv) {
     fprintf(stderr, "The current OIFS_DUMMY_ACTION is: %s\n", pathvar);
 
     // Set the OMP_NUM_THREADS environmental variable, the number of threads
-    std::string var25 = std::string("OMP_NUM_THREADS=") + std::to_string(NTHREADS);
-    if (putenv((char *)var25.c_str())) {
+    std::string OMP_NUM_var = std::string("OMP_NUM_THREADS=") + std::to_string(NTHREADS);
+    if (putenv((char *)OMP_NUM_var.c_str())) {
       fprintf(stderr, "putenv failed \n");
       return 1;
     }
@@ -397,8 +375,8 @@ int main(int argc, char** argv) {
     fprintf(stderr, "The current OMP_NUM_THREADS is: %s\n", pathvar);
 
     // Set the OMP_SCHEDULE environmental variable, this enforces static thread scheduling
-    std::string var26 = std::string("OMP_SCHEDULE=STATIC");
-    if (putenv((char *)var26.c_str())) {
+    std::string OMP_SCHED_var = std::string("OMP_SCHEDULE=STATIC");
+    if (putenv((char *)OMP_SCHED_var.c_str())) {
       fprintf(stderr, "putenv failed \n");
       return 1;
     }
@@ -406,8 +384,8 @@ int main(int argc, char** argv) {
     fprintf(stderr, "The current OMP_SCHEDULE is: %s\n", pathvar);
 
     // Set the DR_HOOK environmental variable, this controls the tracing facility in OpenIFS, off=0 and on=1
-    std::string var27 = std::string("DR_HOOK=1");
-    if (putenv((char *)var27.c_str())) {
+    std::string DR_HOOK_var = std::string("DR_HOOK=1");
+    if (putenv((char *)DR_HOOK_var.c_str())) {
       fprintf(stderr, "putenv failed \n");
       return 1;
     }
@@ -415,8 +393,8 @@ int main(int argc, char** argv) {
     fprintf(stderr, "The current DR_HOOK is: %s\n", pathvar);
 
     // Set the DR_HOOK_HEAPCHECK environmental variable, this ensures the heap size statistics are reported
-    std::string var28 = std::string("DR_HOOK_HEAPCHECK=no");
-    if (putenv((char *)var28.c_str())) {
+    std::string DR_HOOK_HEAP_var = std::string("DR_HOOK_HEAPCHECK=no");
+    if (putenv((char *)DR_HOOK_HEAP_var.c_str())) {
       fprintf(stderr, "putenv failed \n");
       return 1;
     }
@@ -424,8 +402,8 @@ int main(int argc, char** argv) {
     fprintf(stderr, "The current DR_HOOK_HEAPCHECK is: %s\n", pathvar);
 
     // Set the DR_HOOK_STACKCHECK environmental variable, this ensures the stack size statistics are reported
-    std::string var29 = std::string("DR_HOOK_STACKCHECK=no");
-    if (putenv((char *)var29.c_str())) {
+    std::string DR_HOOK_STACK_var = std::string("DR_HOOK_STACKCHECK=no");
+    if (putenv((char *)DR_HOOK_STACK_var.c_str())) {
       fprintf(stderr, "putenv failed \n");
       return 1;
     }
@@ -433,8 +411,8 @@ int main(int argc, char** argv) {
     fprintf(stderr, "The current DR_HOOK_STACKCHECK is: %s\n", pathvar);
 
     // Set the OMP_STACKSIZE environmental variable, OpenIFS needs more stack memory per process
-    std::string var30 = std::string("OMP_STACKSIZE=128M");
-    if (putenv((char *)var30.c_str())) {
+    std::string OMP_STACK_var = std::string("OMP_STACKSIZE=128M");
+    if (putenv((char *)OMP_STACK_var.c_str())) {
       fprintf(stderr, "putenv failed \n");
       return 1;
     }
@@ -450,10 +428,10 @@ int main(int argc, char** argv) {
           fprintf(stderr, "NAMELIST file does not exist: %s\n",NAMELIST.c_str());
        }
        // Rename the NAMELIST file to fort.4
-       std::string var31 = std::string("mv ") + namelist_file + slot_path + std::string("/openifs_app/fort.4");
-       fprintf(stderr, "Renaming NAMELIST file: %s\n", var31.c_str());
-       fflush(stderr);
-       system(var31.c_str());
+       std::string namelist_target = namelist_file;
+       std::string namelist_destination = slot_path + std::string("/fort.4");
+       fprintf(stderr,"Copying namelist file from: %s to: %s\n",namelist_target.c_str(),namelist_destination.c_str());
+       boinc_copy(namelist_target.c_str(),namelist_destination.c_str());
     }
     if (stat((char *)namelist_file.c_str(), &buffer) < 0) {
        fprintf(stderr, "NAMELIST file does not exist: %s\n",NAMELIST.c_str());
@@ -473,8 +451,9 @@ int main(int argc, char** argv) {
     std::string FCLEN_TIMESTEP=" -f d"+std::to_string(FCLEN)+" -t "+std::to_string(TIMESTEP);
 
     // Start the OpenIFS job
-    std::string openifs_start = std::string("cd ") + slot_path + \
-                        std::string("/openifs_app;./master.exe -e ") + exptid + FCLEN_TIMESTEP;
+    //std::string openifs_start = std::string("cd ") + slot_path + \
+    //                    std::string("/;./master.exe -e ") + exptid + FCLEN_TIMESTEP;
+    std::string openifs_start = std::string("./master.exe -e ") + exptid + FCLEN_TIMESTEP;
     fprintf(stderr, "Starting the executable: %s\n", openifs_start.c_str());
     fflush(stderr);
     system(openifs_start.c_str());
@@ -482,62 +461,48 @@ int main(int argc, char** argv) {
     sleep_until(system_clock::now() + seconds(5));
 
     // Make the results folder
-    std::string result_name = std::string("openifs_") + std::to_string(FCLEN) + std::string("_") + unique_member_id + std::string("_") + batchid + std::string("_") + wuid;
-    std::string results_folder = slot_path + std::string("/") + result_name;
-    if (mkdir(results_folder.c_str(),S_IRWXU|S_IRWXG|S_IROTH|S_IXOTH) != 0) fprintf(stderr, "mkdir() openifs_result failed\n");
-
-    // Move the results to the results folder
-    std::string move_results = std::string("mv -t ") + \
-                        slot_path + std::string("/") + result_name + std::string(" ") + \
-                        slot_path + std::string("/openifs_app/ICM*+* ") + \
-                        slot_path + std::string("/openifs_app/NODE* ") + \
-                        slot_path + std::string("/openifs_app/ifs.stat");
-    fprintf(stderr, "Moving the results to the results folder: %s\n", move_results.c_str());
-    fflush(stderr);
-    system(move_results.c_str());
+    std::string result_name = std::string("openifs_") + unique_member_id + std::string("_") + START_DATE + \
+                              std::string("_") + std::to_string(FCLEN) + std::string("_") + batchid + std::string("_") + wuid;
 
     boinc_end_critical_section();
 
-    // Change directory to the slot path
-    if (chdir(slot_path) != 0) fprintf(stderr, "chdir() failed to: %s\n",slot_path);
-
     // Tar the results files
     std::string tar_results = std::string("tar cf ") + result_name + \
-                        std::string(".tar ") + result_name + \
-                        std::string("/ICM*+* ") + result_name + \
-                        std::string("/NODE* ") + result_name + \
-                        std::string("/ifs.stat");
+                              std::string(".tar ") + \
+                              std::string("ICM*+* ") + \
+                              std::string("NODE* ") + \
+                              std::string("ifs.stat");
     fprintf(stderr, "Tarring: %s\n", tar_results.c_str());
     fflush(stderr);
     system(tar_results.c_str());
 
     sleep_until(system_clock::now() + seconds(20));
 
-    // Copy results files to script directory
-    std::string copy_results = std::string("cp ") + slot_path + std::string("/") + result_name + std::string(".tar ") + project_path;
-    fprintf(stderr, "Copying results files to script directory: %s\n", copy_results.c_str());
-    fflush(stderr);
-    system(copy_results.c_str());
+    // Copy the results file to the script directory
+    std::string results_target = slot_path + std::string("/") + result_name + std::string(".tar");
+    std::string results_destination = project_path + result_name + std::string(".tar");
+    fprintf(stderr,"Copying results files from: %s to: %s\n",results_target.c_str(),results_destination.c_str());
+    boinc_copy(results_target.c_str(),results_destination.c_str());
 
     sleep_until(system_clock::now() + seconds(20));
 
-//    ZipFileList zfl;
-//    zfl.clear();
-//    std::string var37 = project_path + std::string("/openifs_app/NODE.001_01");
-//    zfl.push_back(var37);
-//    std::string var38 = project_path + std::string("/openifs_app/ifs.stat");
-//    zfl.push_back(var38);
+    ZipFileList zfl;
+    zfl.clear();
+    std::string var37 = slot_path + std::string("/NODE.001_01");
+    zfl.push_back(var37);
+    std::string var38 = slot_path + std::string("/ifs.stat");
+    zfl.push_back(var38);
 
-//    if (zfl.size() > 0){
-//       std::string strOut = project_path + std::string("/") + result_name + std::string(".zip");
-//       boinc_zip(ZIP_IT, strOut.c_str(), &zfl);
-//    }
+    if (zfl.size() > 0){
+       std::string strOut = project_path + std::string("/") + result_name + std::string(".zip");
+       boinc_zip(ZIP_IT, strOut.c_str(), &zfl);
+    }
 
     fprintf(stderr, "Checkpoint 1\n");
     fflush(stderr);
 
     // Upload the results file
-    std::string upload_results = project_path + std::string("/") + result_name + std::string(".tar");
+    std::string upload_results = project_path + result_name + std::string(".tar");
     fprintf(stderr, "File being uploaded: %s\n", upload_results.c_str());
     fflush(stderr);
     boinc_upload_file(upload_results);
