@@ -15,6 +15,8 @@
 #include <fstream>
 #include <iostream>
 #include <exception>
+#include <dirent.h> 
+#include <regex.h>
 #include "./boinc/api/boinc_api.h"
 #include "./boinc/zip/boinc_zip.h"
 
@@ -27,7 +29,9 @@ int main(int argc, char** argv) {
     using namespace std::this_thread;
     using namespace std;
     int retval = 0;
-    char buff[_MAX_PATH];
+    DIR *dirp;
+    struct dirent *dir;
+    regex_t regex;
 
     // Defaults to input arguments
     int OIFS_RUN=1;                   // run number, output will be saved to directory: output$OIFS_RUN
@@ -103,9 +107,6 @@ int main(int argc, char** argv) {
     fflush(stderr);
     boinc_zip(UNZIP_IT,app_zip.c_str(),slot_path);
 
-    // Make the ifsdata directory
-    std::string ifsdata_folder = slot_path + std::string("/ifsdata");
-    if (mkdir(ifsdata_folder.c_str(),S_IRWXU|S_IRWXG|S_IROTH|S_IXOTH) != 0) fprintf(stderr, "mkdir() ifsdata failed\n");
 
     // Copy namelist files to working directory
     std::string wu_target = project_path + std::string("openifs_wu_") + wuid + std::string(".zip");
@@ -252,6 +253,7 @@ int main(int argc, char** argv) {
        fclose(fParse);
     }
 
+
     // Copy the IC ancils to working directory
     std::string ic_ancil_target = project_path + IC_ANCIL_FILE + std::string(".zip");
     std::string ic_ancil_destination = slot_path + std::string("/") + IC_ANCIL_FILE + std::string(".zip");
@@ -263,6 +265,7 @@ int main(int argc, char** argv) {
     fprintf(stderr, "Unzipping IC ancils zip file: %s\n", var8.c_str());
     fflush(stderr);
     boinc_zip(UNZIP_IT,var8.c_str(),slot_path);
+
 
     // Copy the wave data file to working directory
     std::string wave_data_target = project_path + WAVE_DATA_FILE + std::string(".zip");
@@ -276,16 +279,16 @@ int main(int argc, char** argv) {
     fflush(stderr);
     boinc_zip(UNZIP_IT,var11.c_str(),slot_path);
 
+
+    // Make the ifsdata directory
+    std::string ifsdata_folder = slot_path + std::string("/ifsdata");
+    if (mkdir(ifsdata_folder.c_str(),S_IRWXU|S_IRWXG|S_IROTH|S_IXOTH) != 0) fprintf(stderr, "mkdir() ifsdata failed\n");
+
     // Copy the GHG ancils to working directory
     std::string ghg_target = project_path + GHG_FILE + std::string(".zip");
     std::string ghg_destination = slot_path + std::string("/ifsdata/") + GHG_FILE + std::string(".zip");
     fprintf(stderr,"Copying GHG ancils from: %s to: %s\n",ghg_target.c_str(),ghg_destination.c_str());
     boinc_copy(ghg_target.c_str(),ghg_destination.c_str());
-
-    // Change directory to the GHG ancils directory
-    std::string ghg_ancils_dir = slot_path + std::string("/ifsdata/");
-    if (chdir(ghg_ancils_dir.c_str()) != 0) fprintf(stderr, "chdir() failed to: %s\n",ghg_ancils_dir.c_str());
-    fprintf(stderr,"The current directory is: %s\n",getcwd(buff,_MAX_PATH));
 
     // Unzip the GHG ancils zip file
     std::string ghg_zip = slot_path + std::string("/ifsdata/") + GHG_FILE + std::string(".zip");
@@ -293,9 +296,6 @@ int main(int argc, char** argv) {
     fflush(stderr);
     boinc_zip(UNZIP_IT,ghg_zip.c_str(),slot_path+std::string("/ifsdata/"));
 
-    // Change directory back to the slots directory
-    if (chdir(slot_path) != 0) fprintf(stderr, "chdir() failed to: %s\n",slot_path);
-    fprintf(stderr,"The current directory is: %s\n",getcwd(buff,_MAX_PATH));
 
     // Make the climate data directory
     std::string var18 = slot_path + std::string("/") + \
@@ -310,12 +310,6 @@ int main(int argc, char** argv) {
     fprintf(stderr,"Copying climate data file from: %s to: %s\n",climate_data_target.c_str(),climate_data_destination.c_str());
     boinc_copy(climate_data_target.c_str(),climate_data_destination.c_str());
 
-    // Change directory to the climate data directory
-    std::string clim_data_dir = slot_path + std::string("/") + \
-                                std::to_string(HORIZ_RESOLUTION) + std::string("l_") + std::to_string(GRID_RESOLUTION);
-    if (chdir(clim_data_dir.c_str()) != 0) fprintf(stderr, "chdir() failed to: %s\n",clim_data_dir.c_str());
-    fprintf(stderr,"The current directory is: %s\n",getcwd(buff,_MAX_PATH));
-
     // Unzip the climate data zip file
     std::string climate_zip = slot_path + std::string("/") + \
                               std::to_string(HORIZ_RESOLUTION) + std::string("l_") + std::to_string(GRID_RESOLUTION) + \
@@ -323,10 +317,6 @@ int main(int argc, char** argv) {
     fprintf(stderr, "Unzipping the climate data zip file: %s\n", climate_zip.c_str());
     fflush(stderr);
     boinc_zip(UNZIP_IT,climate_zip.c_str(),slot_path+std::string("/")+std::to_string(HORIZ_RESOLUTION)+std::string("l_")+std::to_string(GRID_RESOLUTION));
-
-    // Change directory back to the slots directory
-    if (chdir(slot_path) != 0) fprintf(stderr, "chdir() failed to: %s\n",slot_path);
-    fprintf(stderr,"The current directory is: %s\n",getcwd(buff,_MAX_PATH));
 
     char *pathvar;
     // Set the GRIB_SAMPLES_PATH environmental variable
@@ -348,12 +338,6 @@ int main(int argc, char** argv) {
     }
     pathvar = getenv("GRIB_DEFINITION_PATH");
     fprintf(stderr, "The current GRIB_DEFINITION_PATH is: %s\n", pathvar);
-
-    // Change permissions on the app directory
-    std::string change_permission = std::string("chmod -R 777 ") + slot_path;
-    fprintf(stderr, "Changing permissions: %s\n", change_permission.c_str());
-    fflush(stderr);
-    system(change_permission.c_str());
 
     // Set the OIFS_DUMMY_ACTION environmental variable, this controls what OpenIFS does if it goes into a dummy subroutine
     // Possible values are: 'quiet', 'verbose' or 'abort'
@@ -451,8 +435,6 @@ int main(int argc, char** argv) {
     std::string FCLEN_TIMESTEP=" -f d"+std::to_string(FCLEN)+" -t "+std::to_string(TIMESTEP);
 
     // Start the OpenIFS job
-    //std::string openifs_start = std::string("cd ") + slot_path + \
-    //                    std::string("/;./master.exe -e ") + exptid + FCLEN_TIMESTEP;
     std::string openifs_start = std::string("./master.exe -e ") + exptid + FCLEN_TIMESTEP;
     fprintf(stderr, "Starting the executable: %s\n", openifs_start.c_str());
     fflush(stderr);
@@ -466,32 +448,30 @@ int main(int argc, char** argv) {
 
     boinc_end_critical_section();
 
-    // Tar the results files
-    std::string tar_results = std::string("tar cf ") + result_name + \
-                              std::string(".tar ") + \
-                              std::string("ICM*+* ") + \
-                              std::string("NODE* ") + \
-                              std::string("ifs.stat");
-    fprintf(stderr, "Tarring: %s\n", tar_results.c_str());
-    fflush(stderr);
-    system(tar_results.c_str());
-
     sleep_until(system_clock::now() + seconds(20));
 
-    // Copy the results file to the script directory
-    std::string results_target = slot_path + std::string("/") + result_name + std::string(".tar");
-    std::string results_destination = project_path + result_name + std::string(".tar");
-    fprintf(stderr,"Copying results files from: %s to: %s\n",results_target.c_str(),results_destination.c_str());
-    boinc_copy(results_target.c_str(),results_destination.c_str());
-
-    sleep_until(system_clock::now() + seconds(20));
-
+    // Compile results zip file using BOINC zip
     ZipFileList zfl;
     zfl.clear();
-    std::string var37 = slot_path + std::string("/NODE.001_01");
-    zfl.push_back(var37);
-    std::string var38 = slot_path + std::string("/ifs.stat");
-    zfl.push_back(var38);
+    std::string ifsstat_file = slot_path + std::string("/ifs.stat");
+    zfl.push_back(ifsstat_file);
+
+    // Read the list of files from the slots directory and add matching files to the zip
+    dirp = opendir(slot_path);
+    if (dirp) {
+        while ((dir = readdir(dirp)) != NULL) {
+          fprintf(stderr,"In slots folder: %s\n",dir->d_name);
+          regcomp(&regex,"^[ICM+]",0);
+          regcomp(&regex,"^[NODE+]",0);
+          regcomp(&regex,"\\+",0);
+
+          if (!regexec(&regex,dir->d_name,(size_t) 0,NULL,0)) {
+            zfl.push_back(slot_path+std::string("/")+dir->d_name);
+            fprintf(stderr,"Adding to the zip: %s\n",(slot_path+std::string("/")+dir->d_name));
+          }
+        }
+        closedir(dirp);
+    }
 
     if (zfl.size() > 0){
        std::string strOut = project_path + std::string("/") + result_name + std::string(".zip");
@@ -502,7 +482,7 @@ int main(int argc, char** argv) {
     fflush(stderr);
 
     // Upload the results file
-    std::string upload_results = project_path + result_name + std::string(".tar");
+    std::string upload_results = project_path + result_name + std::string(".zip");
     fprintf(stderr, "File being uploaded: %s\n", upload_results.c_str());
     fflush(stderr);
     boinc_upload_file(upload_results);
