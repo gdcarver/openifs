@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
     int OIFS_RES;	              // model resolution - not used
     std::string OIFS_EXPID;           // model experiment id, must match string in filenames
     std::string OIFS_EXE;             // OpenIFS executable - not used
-    int NPROC=8;                      // number of MPI tasks, need to be set in fort.4 as well
+    int NPROC=1;                      // number of MPI tasks, need to be set in fort.4 as well
     int NTHREADS=1;                   // default number ofexi OPENMP threads
     std::string NAMELIST="fort.4";    // NAMELIST file, this name is fixed
     int TIMESTEP;                     // size of the timestep
@@ -198,6 +198,7 @@ int main(int argc, char** argv) {
                 break;
             }
        }
+       // [GC] TODO: Need to search for and replace NPROC. Must ensure it's set to '1' as we are running without MPI.
        // OK, either feof or we hit the string		
        if (strCpy[0][0] != 0x00) {
             memset(strTmp, 0x00, _MAX_PATH);
