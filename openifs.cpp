@@ -403,6 +403,15 @@ int main(int argc, char** argv) {
     }
     pathvar = getenv("DR_HOOK_STACKCHECK");
     fprintf(stderr, "The current DR_HOOK_STACKCHECK is: %s\n", pathvar);
+	
+	// Set the DR_HOOK_NOT_MPI environmental variable, this ensures DrHook does not make any MPI calls
+	std::string DR_HOOK_NOT_MPI_var = std::string("DR_HOOK_NOT_MPI=true");
+	if (putenv((char *)DR_HOOK_NOT_MPI_var.c_str())) {
+		fprintf(stderr, "putenv failed \n");
+		return 1;
+	}
+	pathvar = getenv("DR_HOOK_NOT_MPI");
+	fprintf(stderr, "The current DR_HOOK_NOT_MPI is: %s\n", pathvar);
 
     // Check for existence of NAMELIST
     struct stat buffer;
