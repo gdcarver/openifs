@@ -367,6 +367,15 @@ int main(int argc, char** argv) {
     }
     pathvar = getenv("OMP_SCHEDULE");
     fprintf(stderr, "The current OMP_SCHEDULE is: %s\n", pathvar);
+	
+	// Set the OMP_STACKSIZE environmental variable, OpenIFS needs more stack memory per process
+	std::string OMP_STACK_var = std::string("OMP_STACKSIZE=128M");
+	if (putenv((char *)OMP_STACK_var.c_str())) {
+		fprintf(stderr, "putenv failed \n");
+		return 1;
+	}
+	pathvar = getenv("OMP_STACKSIZE");
+	fprintf(stderr, "The current OMP_STACKSIZE is: %s\n", pathvar);
 
     // Set the DR_HOOK environmental variable, this controls the tracing facility in OpenIFS, off=0 and on=1
     std::string DR_HOOK_var = std::string("DR_HOOK=1");
@@ -394,15 +403,6 @@ int main(int argc, char** argv) {
     }
     pathvar = getenv("DR_HOOK_STACKCHECK");
     fprintf(stderr, "The current DR_HOOK_STACKCHECK is: %s\n", pathvar);
-
-    // Set the OMP_STACKSIZE environmental variable, OpenIFS needs more stack memory per process
-    std::string OMP_STACK_var = std::string("OMP_STACKSIZE=128M");
-    if (putenv((char *)OMP_STACK_var.c_str())) {
-      fprintf(stderr, "putenv failed \n");
-      return 1;
-    }
-    pathvar = getenv("OMP_STACKSIZE");
-    fprintf(stderr, "The current OMP_STACKSIZE is: %s\n", pathvar);
 
     // Check for existence of NAMELIST
     struct stat buffer;
