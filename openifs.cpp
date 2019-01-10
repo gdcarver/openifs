@@ -34,11 +34,7 @@ int main(int argc, char** argv) {
     regex_t regex;
 
     // Defaults to input arguments
-    int OIFS_RUN=1;                   // run number, output will be saved to directory: output$OIFS_RUN
-    int OIFS_RES;	              // model resolution - not used
     std::string OIFS_EXPID;           // model experiment id, must match string in filenames
-    std::string OIFS_EXE;             // OpenIFS executable - not used
-    int NPROC=1;                      // number of MPI tasks, need to be set in fort.4 as well
     int NTHREADS=1;                   // default number ofexi OPENMP threads
     std::string NAMELIST="fort.4";    // NAMELIST file, this name is fixed
     int TIMESTEP;                     // size of the timestep
@@ -198,8 +194,8 @@ int main(int argc, char** argv) {
                 break;
             }
        }
-       // [GC] TODO: Need to search for and replace NPROC. Must ensure it's set to '1' as we are running without MPI.
-       // OK, either feof or we hit the string		
+
+       // Either feof or we hit the string		
        if (strCpy[0][0] != 0x00) {
             memset(strTmp, 0x00, _MAX_PATH);
             strncpy(strTmp, (char*)(strCpy[0] + strlen(strSearch[0])), 100);
@@ -367,15 +363,15 @@ int main(int argc, char** argv) {
     }
     pathvar = getenv("OMP_SCHEDULE");
     fprintf(stderr, "The current OMP_SCHEDULE is: %s\n", pathvar);
-	
-	// Set the OMP_STACKSIZE environmental variable, OpenIFS needs more stack memory per process
-	std::string OMP_STACK_var = std::string("OMP_STACKSIZE=128M");
-	if (putenv((char *)OMP_STACK_var.c_str())) {
-		fprintf(stderr, "putenv failed \n");
-		return 1;
-	}
-	pathvar = getenv("OMP_STACKSIZE");
-	fprintf(stderr, "The current OMP_STACKSIZE is: %s\n", pathvar);
+
+    // Set the OMP_STACKSIZE environmental variable, OpenIFS needs more stack memory per process
+    std::string OMP_STACK_var = std::string("OMP_STACKSIZE=128M");
+    if (putenv((char *)OMP_STACK_var.c_str())) {
+      fprintf(stderr, "putenv failed \n");
+      return 1;
+    }
+    pathvar = getenv("OMP_STACKSIZE");
+    fprintf(stderr, "The current OMP_STACKSIZE is: %s\n", pathvar);
 
     // Set the DR_HOOK environmental variable, this controls the tracing facility in OpenIFS, off=0 and on=1
     std::string DR_HOOK_var = std::string("DR_HOOK=1");
