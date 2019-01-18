@@ -1,7 +1,7 @@
 //
 // Control code for the OpenIFS application in the climateprediction.net project
 //
-// Written by Andy Bowery (Oxford eResearch Centre, Oxford University) December 2018
+// Written by Andy Bowery (Oxford eResearch Centre, Oxford University) January 2019
 //
 
 #include <stdlib.h>
@@ -32,13 +32,13 @@ int main(int argc, char** argv) {
     DIR *dirp;
     struct dirent *dir;
     regex_t regex;
+    std::string IFSDATA_FILE, IC_ANCIL_FILE, CLIMATE_DATA_FILE, GRID_TYPE;
+    int HORIZ_RESOLUTION;
 
     // Defaults to input arguments
     std::string OIFS_EXPID;           // model experiment id, must match string in filenames
     int NTHREADS=1;                   // default number ofexi OPENMP threads
     std::string NAMELIST="fort.4";    // NAMELIST file, this name is fixed
-    //int TIMESTEP;                     // size of the timestep
-    int FCLEN;                        // number of days of the model run
 
     boinc_init();
     boinc_parse_init_data_file();
@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
     options.multi_process = true;
     options.check_heartbeat = true;
     options.handle_process_control = true;  // monitor handles all suspend/quit/resume
-    options.direct_process_action = false;  // monitor won't get suspended/killed by boinc
+    options.direct_process_action = false;  // monitor won't get suspended/killed by BOINC
     options.send_status_msgs = false;
 
     retval = boinc_init_options(&options);
@@ -75,10 +75,12 @@ int main(int argc, char** argv) {
 
     fprintf(stderr, "(argv0) %s\n", argv[0]);
     fprintf(stderr, "(argv1) version: %s\n", argv[1]);
-    fprintf(stderr, "(argv1) exptid: %s\n", argv[2]);
-    fprintf(stderr, "(argv2) unique_member_id: %s\n", argv[3]);
-    fprintf(stderr, "(argv3) batchid: %s\n", argv[4]);
-    fprintf(stderr, "(argv4) wuid: %s\n", argv[5]);
+    fprintf(stderr, "(argv2) exptid: %s\n", argv[2]);
+    fprintf(stderr, "(argv3) unique_member_id: %s\n", argv[3]);
+    fprintf(stderr, "(argv4) batchid: %s\n", argv[4]);
+    fprintf(stderr, "(argv5) wuid: %s\n", argv[5]);
+    fprintf(stderr, "(argv6) fclen: %s\n", argv[6]);
+    fprintf(stderr, "(argv7) start_date: %s\n", argv[7]);
     fflush(stderr);
 
     // Read the exptid, batchid, version, wuid from the command line
@@ -87,6 +89,8 @@ int main(int argc, char** argv) {
     std::string unique_member_id = argv[3];
     std::string batchid = argv[4];
     std::string wuid = argv[5];
+    std::string fclen = argv[6];
+    std::string start_date = argv[7];
     OIFS_EXPID = exptid;
 
     boinc_begin_critical_section();
@@ -105,31 +109,29 @@ int main(int argc, char** argv) {
 
 
     // Copy namelist files to working directory
-    std::string wu_target = project_path + std::string("openifs_wu_") + wuid + std::string(".zip");
-    std::string wu_destination = slot_path + std::string("/openifs_wu_") + wuid + std::string(".zip");
+    std::string wu_target = project_path + std::string("openifs_wu_") + unique_member_id + std::string("_") + start_date +\
+                      std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid + std::string(".zip");
+    std::string wu_destination = slot_path + std::string("/openifs_wu_") + unique_member_id + std::string("_") + start_date +\
+                         std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid + std::string(".zip");
     fprintf(stderr,"Copying namelist files from: %s to: %s\n",wu_target.c_str(),wu_destination.c_str());
     boinc_copy(wu_target.c_str(),wu_destination.c_str());
 
     // Unzip the namelist zip file
-    std::string namelist_zip = slot_path + std::string("/openifs_wu_") + wuid + std::string(".zip");
+    std::string namelist_zip = slot_path + std::string("/openifs_wu_") + unique_member_id + std::string("_") + start_date +\
+                      std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid + std::string(".zip");
     fprintf(stderr, "Unzipping namelist zip file: %s\n", namelist_zip.c_str());
     fflush(stderr);
     boinc_zip(UNZIP_IT,namelist_zip.c_str(),slot_path);
 
     // Parse the fort.4 namelist for the filenames and variables
     std::string namelist_file = slot_path + std::string("/") + NAMELIST;
-    const char strSearch[7][22]={"!IFSDATA_FILE=","!IC_ANCIL_FILE=","!CLIMATE_DATA_FILE=","!HORIZ_RESOLUTION=",\
-                                 "!GRID_TYPE=","!FCLEN=","!START_DATE="};
-    //"!FCLEN_UNITS=","!TIMESTEP="};
-    char* strFind[7] = {NULL,NULL,NULL,NULL,NULL,NULL,NULL};
-    char strCpy[7][_MAX_PATH];
+    const char strSearch[5][22]={"!IFSDATA_FILE=","!IC_ANCIL_FILE=","!CLIMATE_DATA_FILE=","!HORIZ_RESOLUTION=","!GRID_TYPE="};
+    char* strFind[5] = {NULL,NULL,NULL,NULL,NULL};
+    char strCpy[5][_MAX_PATH];
     char strTmp[_MAX_PATH];
-    memset(strCpy,0x00,7*_MAX_PATH);
+    memset(strCpy,0x00,5*_MAX_PATH);
     memset(strTmp,0x00,_MAX_PATH);
     FILE* fParse = boinc_fopen(namelist_file.c_str(),"r");
-    
-    std::string IFSDATA_FILE, IC_ANCIL_FILE, CLIMATE_DATA_FILE, GRID_TYPE, START_DATE; //FCLEN_UNITS
-    int HORIZ_RESOLUTION;
 
     if (fParse) {
        fseek(fParse, 0x00, SEEK_SET); // go to top of file
@@ -167,19 +169,7 @@ int main(int argc, char** argv) {
                     strcpy(strCpy[4], strFind[4]);
                 }
             }
-            if (!strFind[5]) {
-                strFind[5] = strstr(strTmp, strSearch[5]);
-                if (strFind[5]) {
-                    strcpy(strCpy[5], strFind[5]);
-                }
-            }
-            if (!strFind[6]) {
-                strFind[6] = strstr(strTmp, strSearch[6]);
-                if (strFind[6]) {
-                    strcpy(strCpy[6], strFind[6]);
-                }
-            }
-            if (strFind[0]&&strFind[1]&&strFind[2]&&strFind[3]&&strFind[4]&&strFind[5]&&strFind[6]) {
+            if (strFind[0]&&strFind[1]&&strFind[2]&&strFind[3]&&strFind[4]) {
                 break;
             }
        }
@@ -215,17 +205,6 @@ int main(int argc, char** argv) {
             GRID_TYPE = strTmp; 
             while(!GRID_TYPE.empty() && std::isspace(*GRID_TYPE.rbegin())) GRID_TYPE.erase(GRID_TYPE.length()-1);
             fprintf(stderr, "GRID_TYPE: %s\n", GRID_TYPE.c_str());
-       }
-       if (strCpy[5][0] != 0x00) {
-            FCLEN=atoi(strCpy[5] + strlen(strSearch[5]));
-            fprintf(stderr, "FCLEN: %i\n", FCLEN);
-       }
-       if (strCpy[6][0] != 0x00) {
-            memset(strTmp, 0x00, _MAX_PATH);
-            strncpy(strTmp, (char*)(strCpy[6] + strlen(strSearch[6])), 100);
-            START_DATE = strTmp; 
-            while(!START_DATE.empty() && std::isspace(*START_DATE.rbegin())) START_DATE.erase(START_DATE.length()-1);
-            fprintf(stderr, "START_DATE: %s\n", START_DATE.c_str());
        }
        fclose(fParse);
     }
@@ -396,11 +375,8 @@ int main(int argc, char** argv) {
     stack_limits.rlim_cur = stack_limits.rlim_max = RLIM_INFINITY;
     if (setrlimit(RLIMIT_STACK, &stack_limits) != 0) fprintf(stderr, "setting stack limit to unlimited failed\n");
 
-    // Set FCLEN_TIMESTEP
-    //std::string FCLEN_TIMESTEP=" -f "+std::string(FCLEN_UNITS)+std::to_string(FCLEN)+" -t "+std::to_string(TIMESTEP);
-
     // Start the OpenIFS job
-    std::string openifs_start = std::string("./master.exe -e ") + exptid; //+FCLEN_TIMESTEP
+    std::string openifs_start = std::string("./master.exe -e ") + exptid;
     fprintf(stderr, "Starting the executable: %s\n", openifs_start.c_str());
     fflush(stderr);
     system(openifs_start.c_str());
@@ -408,8 +384,8 @@ int main(int argc, char** argv) {
     sleep_until(system_clock::now() + seconds(5));
 
     // Make the results folder
-    std::string result_name = std::string("openifs_") + unique_member_id + std::string("_") + START_DATE + \
-               std::string("_") + std::to_string(FCLEN) + std::string("_") + batchid + std::string("_") + wuid;
+    std::string result_name = std::string("openifs_") + unique_member_id + std::string("_") + start_date + \
+                              std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid;
 
     boinc_end_critical_section();
 
