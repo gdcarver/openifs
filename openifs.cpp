@@ -432,6 +432,8 @@ int main(int argc, char** argv) {
     fprintf(stderr, "Finished upload of result\n");
     fflush(stderr);
 
+    sleep_until(system_clock::now() + seconds(20));
+
     boinc_finish(0);
     return 0;
 }
