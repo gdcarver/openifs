@@ -1,7 +1,7 @@
 //
 // Control code for the OpenIFS application in the climateprediction.net project
 //
-// Written by Andy Bowery (Oxford eResearch Centre, Oxford University) January 2019
+// Written by Andy Bowery (Oxford eResearch Centre, Oxford University) February 2019
 //
 
 #include <stdlib.h>
@@ -17,6 +17,7 @@
 #include <exception>
 #include <dirent.h> 
 #include <regex.h>
+#include <sys/wait.h>
 #include "./boinc/api/boinc_api.h"
 #include "./boinc/zip/boinc_zip.h"
 
@@ -24,16 +25,24 @@
    #define _MAX_PATH 512
 #endif
 
+int checkChildStatus(long,int);
+int checkBOINCStatus(long,int);
+long launchProcess(const char*,const char*,const char*);
+
+using namespace std::chrono;
+using namespace std::this_thread;
+using namespace std;
+
 int main(int argc, char** argv) {
-    using namespace std::chrono;
-    using namespace std::this_thread;
-    using namespace std;
     int retval = 0;
     DIR *dirp;
     struct dirent *dir;
     regex_t regex;
     std::string IFSDATA_FILE, IC_ANCIL_FILE, CLIMATE_DATA_FILE, GRID_TYPE;
     int HORIZ_RESOLUTION;
+    char *pathvar;
+    int process_running = 0;
+    long handleProcess;
 
     // Defaults to input arguments
     std::string OIFS_EXPID;           // model experiment id, must match string in filenames
@@ -262,27 +271,6 @@ int main(int argc, char** argv) {
     boinc_zip(UNZIP_IT,climate_zip.c_str(),slot_path+std::string("/")+std::to_string(HORIZ_RESOLUTION)+std::string(GRID_TYPE));
 
 
-    char *pathvar;
-    // Set the GRIB_SAMPLES_PATH environmental variable
-    std::string GRIB_SAMPLES_var = std::string("GRIB_SAMPLES_PATH=") + slot_path + \
-                                   std::string("/eccodes/ifs_samples/grib1_mlgrib2");
-    if (putenv((char *)GRIB_SAMPLES_var.c_str())) {
-      fprintf(stderr, "putenv failed \n");
-      return 1;
-    }
-    pathvar = getenv("GRIB_SAMPLES_PATH");
-    fprintf(stderr, "The current GRIB_SAMPLES_PATH is: %s\n", pathvar);
-
-    // Set the GRIB_DEFINITION_PATH environmental variable
-    std::string GRIB_DEF_var = std::string("GRIB_DEFINITION_PATH=") + slot_path + \
-                               std::string("/eccodes/definitions");
-    if (putenv((char *)GRIB_DEF_var.c_str())) {
-      fprintf(stderr, "putenv failed \n");
-      return 1;
-    }
-    pathvar = getenv("GRIB_DEFINITION_PATH");
-    fprintf(stderr, "The current GRIB_DEFINITION_PATH is: %s\n", pathvar);
-
     // Set the OIFS_DUMMY_ACTION environmental variable, this controls what OpenIFS does if it goes into a dummy subroutine
     // Possible values are: 'quiet', 'verbose' or 'abort'
     std::string OIFS_var = std::string("OIFS_DUMMY_ACTION=abort");
@@ -375,21 +363,28 @@ int main(int argc, char** argv) {
     stack_limits.rlim_cur = stack_limits.rlim_max = RLIM_INFINITY;
     if (setrlimit(RLIMIT_STACK, &stack_limits) != 0) fprintf(stderr, "setting stack limit to unlimited failed\n");
 
-    // Start the OpenIFS job
-    std::string openifs_start = std::string("./master.exe -e ") + exptid;
-    fprintf(stderr, "Starting the executable: %s\n", openifs_start.c_str());
-    fflush(stderr);
-    system(openifs_start.c_str());
 
-    sleep_until(system_clock::now() + seconds(5));
+    // Start the OpenIFS job
+    std::string strCmd = slot_path + std::string("/./master.exe");
+    handleProcess = launchProcess(slot_path,strCmd.c_str(),exptid.c_str());
+
+    //fprintf(stderr, "handleProcess: %ld\n",handleProcess);
+    if (handleProcess > 0) process_running = 1;
+
+    boinc_end_critical_section();
+
+    // Periodically check the status
+    while (process_running > 0) {
+       sleep_until(system_clock::now() + seconds(1));
+       process_running = checkChildStatus(handleProcess,process_running);
+       process_running = checkBOINCStatus(handleProcess,process_running);
+    }
+
+    boinc_begin_critical_section();
 
     // Make the results folder
     std::string result_name = std::string("openifs_") + unique_member_id + std::string("_") + start_date + \
                               std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid;
-
-    boinc_end_critical_section();
-
-    sleep_until(system_clock::now() + seconds(20));
 
     // Compile results zip file using BOINC zip
     ZipFileList zfl;
@@ -403,7 +398,7 @@ int main(int argc, char** argv) {
     dirp = opendir(slot_path);
     if (dirp) {
         while ((dir = readdir(dirp)) != NULL) {
-          fprintf(stderr,"In slots folder: %s\n",dir->d_name);
+          //fprintf(stderr,"In slots folder: %s\n",dir->d_name);
           regcomp(&regex,"^[ICM+]",0);
           regcomp(&regex,"\\+",0);
 
@@ -434,6 +429,137 @@ int main(int argc, char** argv) {
 
     sleep_until(system_clock::now() + seconds(20));
 
+    boinc_end_critical_section();
+
     boinc_finish(0);
     return 0;
+}
+
+
+int checkChildStatus(long handleProcess, int process_running) {
+    //fprintf(stderr, "waitpid: %i\n",waitpid(handleProcess, 0, WNOHANG));
+
+    // Check whether child processed has exited
+    if (waitpid(handleProcess, 0, WNOHANG)==-1) process_running = 0;
+    return process_running;
+}
+
+
+int checkBOINCStatus(long handleProcess, int process_running) {
+    BOINC_STATUS status;
+    boinc_get_status(&status);
+
+    // If BOINC has received a quit, abort or no heartbeat, end process
+    if (status.quit_request) {
+       fprintf(stderr,"Quit request from BOINC\n");
+       fflush(stderr);
+       kill(handleProcess, SIGKILL);
+       process_running = 0;
+       return process_running;
+    }
+    else if (status.abort_request) {
+       fprintf(stderr,"Abort request from BOINC\n");
+       fflush(stderr);
+       kill(handleProcess, SIGKILL);
+       process_running = 0;
+       return process_running;
+    }
+    else if (status.no_heartbeat) {
+       fprintf(stderr,"No heartbeat from BOINC\n");
+       fflush(stderr);
+       kill(handleProcess, SIGKILL);
+       process_running = 0;
+       return process_running;
+    }
+    // Else if suspended, suspend and periodically check status
+    else {
+       if (status.suspended) {
+          fprintf(stderr,"Suspend request from BOINC\n");
+          fflush(stderr);
+          kill(handleProcess, SIGSTOP);
+
+          while (status.suspended) {
+             boinc_get_status(&status);
+             if (status.quit_request) {
+                fprintf(stderr,"Quit request from BOINC\n");
+                fflush(stderr);
+                kill(handleProcess, SIGKILL);
+                process_running = 0;
+                return process_running;
+             }
+             else if (status.abort_request) {
+                fprintf(stderr,"Abort request from BOINC\n");
+                fflush(stderr);
+                kill(handleProcess, SIGKILL);
+                process_running = 0;
+                return process_running;
+             }
+             else if (status.no_heartbeat) {
+                fprintf(stderr,"No heartbeat from BOINC\n");
+                fflush(stderr);
+                kill(handleProcess, SIGKILL);
+                process_running = 0;
+                return process_running;
+             }
+             sleep_until(system_clock::now() + seconds(1));
+          }
+          // Resume run
+          fprintf(stderr, "Resuming workunit\n");
+          kill(handleProcess, SIGCONT);
+       }
+       return process_running;
+    }
+}
+
+
+long launchProcess(const char* slot_path,const char* strCmd,const char* exptid)
+{
+    int retval = 0;
+    long handleProcess;
+
+    fprintf(stderr,"slot_path: %s\n",slot_path);
+    fprintf(stderr,"strCmd: %s\n",strCmd);
+    fprintf(stderr,"exptid: %s\n",exptid);
+    fflush(stderr);
+
+    switch((handleProcess=fork())) {
+       case -1: {
+          fprintf(stderr,"Model %s couldn't start\n",strCmd);
+          exit(0);
+          break;
+       }
+       case 0: { //child process
+          char *pathvar;
+          // Set the GRIB_SAMPLES_PATH environmental variable
+          std::string GRIB_SAMPLES_var = std::string("GRIB_SAMPLES_PATH=") + slot_path + \
+                                         std::string("/eccodes/ifs_samples/grib1_mlgrib2");
+          if (putenv((char *)GRIB_SAMPLES_var.c_str())) {
+            fprintf(stderr, "putenv failed \n");
+          }
+          pathvar = getenv("GRIB_SAMPLES_PATH");
+          fprintf(stderr, "The current GRIB_SAMPLES_PATH is: %s\n", pathvar);
+
+          // Set the GRIB_DEFINITION_PATH environmental variable
+          std::string GRIB_DEF_var = std::string("GRIB_DEFINITION_PATH=") + slot_path + \
+                                     std::string("/eccodes/definitions");
+          if (putenv((char *)GRIB_DEF_var.c_str())) {
+            fprintf(stderr, "putenv failed \n");
+          }
+          pathvar = getenv("GRIB_DEFINITION_PATH");
+          fprintf(stderr, "The current GRIB_DEFINITION_PATH is: %s\n", pathvar);
+
+          fprintf(stderr,"Executing program\n");
+          fflush(stderr);      
+          retval = execl(strCmd,strCmd,"-e",exptid,NULL);
+
+          // if execl returns then there was an error
+          fprintf(stderr,"execl(%s,%s,%s) failed!\n",slot_path,strCmd,exptid);
+          exit(retval);
+          break;
+       }
+       default: 
+          fprintf(stderr,"Program launched with process id: %ld\n",handleProcess);
+          fflush(stderr);
+    }
+    return handleProcess;
 }
