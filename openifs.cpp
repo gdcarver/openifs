@@ -1,7 +1,7 @@
 //
 // Control code for the OpenIFS application in the climateprediction.net project
 //
-// Written by Andy Bowery (Oxford eResearch Centre, Oxford University) February 2019
+// Written by Andy Bowery (Oxford eResearch Centre, Oxford University) March 2019
 //
 
 #include <stdlib.h>
@@ -18,6 +18,8 @@
 #include <dirent.h> 
 #include <regex.h>
 #include <sys/wait.h>
+#include <string>
+#include <sstream>
 #include "./boinc/api/boinc_api.h"
 #include "./boinc/zip/boinc_zip.h"
 
@@ -34,15 +36,15 @@ using namespace std::this_thread;
 using namespace std;
 
 int main(int argc, char** argv) {
-    std::string IFSDATA_FILE, IC_ANCIL_FILE, CLIMATE_DATA_FILE, GRID_TYPE;
-    int HORIZ_RESOLUTION, process_running = 0, retval = 0;
+    std::string IFSDATA_FILE,IC_ANCIL_FILE,CLIMATE_DATA_FILE,GRID_TYPE,project_path,result_name,version;
+    int HORIZ_RESOLUTION,process_running=0,retval=0;
     long handleProcess;
     struct dirent *dir;
     regex_t regex;
     char *pathvar;
     DIR *dirp;
 
-    // Defaults to input arguments
+    // Set defaults for input arguments
     std::string OIFS_EXPID;           // model experiment id, must match string in filenames
     int NTHREADS=1;                   // default number ofexi OPENMP threads
     std::string NAMELIST="fort.4";    // NAMELIST file, this name is fixed
@@ -60,8 +62,8 @@ int main(int argc, char** argv) {
     options.main_program = true;
     options.multi_process = true;
     options.check_heartbeat = true;
-    options.handle_process_control = true;  // monitor handles all suspend/quit/resume
-    options.direct_process_action = false;  // monitor won't get suspended/killed by BOINC
+    options.handle_process_control = true;  // the control code will handle all suspend/quit/resume
+    options.direct_process_action = false;  // the control won't get suspended/killed by BOINC
     options.send_status_msgs = false;
 
     retval = boinc_init_options(&options);
@@ -70,9 +72,64 @@ int main(int argc, char** argv) {
        return retval;
     }
 
-    // Get the project path
-    std::string project_path = dataBOINC.project_dir + std::string("/");
-    fprintf(stderr,"current project directory is: %s\n",project_path.c_str());
+    fprintf(stderr,"(argv0) %s\n",argv[0]);
+    fprintf(stderr,"(argv1) start_date: %s\n",argv[1]);
+    fprintf(stderr,"(argv2) exptid: %s\n",argv[2]);
+    fprintf(stderr,"(argv3) unique_member_id: %s\n",argv[3]);
+    fprintf(stderr,"(argv4) batchid: %s\n",argv[4]);
+    fprintf(stderr,"(argv5) wuid: %s\n",argv[5]);
+    fprintf(stderr,"(argv6) fclen: %s\n",argv[6]);
+    fflush(stderr);
+
+    // Read the exptid, batchid, version, wuid from the command line
+    std::string start_date = argv[1];
+    std::string exptid = argv[2];
+    std::string unique_member_id = argv[3];
+    std::string batchid = argv[4];
+    std::string wuid = argv[5];
+    std::string fclen = argv[6];
+    OIFS_EXPID = exptid;
+
+    if (!boinc_is_standalone()) {
+      // Get the project path
+      project_path = dataBOINC.project_dir + std::string("/");
+      fprintf(stderr,"Current project directory is: %s\n",project_path.c_str());
+
+      // Get the app version and re-parse to add a dot
+      version = std::to_string(dataBOINC.app_version);
+      if (version.length()==3) {
+         version = version.insert(1,".");
+         //fprintf(stderr,"version: %s\n",version.c_str());
+      }
+      else if (version.length()==4) {
+         version = version.insert(2,".");
+         //fprintf(stderr,"version: %s\n",version.c_str());
+      }
+      else {
+         fprintf(stderr,"..Error with the length of app_version, length is: %lu\n",version.length());
+         return 1;
+      }
+
+      // Get the result name
+      result_name = dataBOINC.result_name;
+      fprintf(stderr,"The current version is: %s\n",version.c_str());
+      fprintf(stderr,"The current result_name is: %s\n",result_name.c_str());
+    }
+    // Running in standalone
+    else {
+      fprintf(stderr,"Running in standalone mode\n");
+      // Set the project path
+      project_path = "LOCAL_PATH";
+
+      // Get the app version and result name
+      version = argv[7];
+      fprintf(stderr,"(argv7) app_version: %s\n",argv[7]);
+      result_name = std::string("openifs_") + unique_member_id + std::string("_") + start_date + \
+                    std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid + std::string("_0");
+      fprintf(stderr,"The current result_name is: %s\n",result_name.c_str());
+    }
+
+    boinc_begin_critical_section();
 
     // Get the slots path (the current working path)
     char slot_path[_MAX_PATH];
@@ -80,28 +137,6 @@ int main(int argc, char** argv) {
       fprintf(stderr,"..getcwd returned an error\n");
     else
       fprintf(stderr,"The current working directory is: %s\n",slot_path);
-
-    fprintf(stderr,"(argv0) %s\n",argv[0]);
-    fprintf(stderr,"(argv1) version: %s\n",argv[1]);
-    fprintf(stderr,"(argv2) exptid: %s\n",argv[2]);
-    fprintf(stderr,"(argv3) unique_member_id: %s\n",argv[3]);
-    fprintf(stderr,"(argv4) batchid: %s\n",argv[4]);
-    fprintf(stderr,"(argv5) wuid: %s\n",argv[5]);
-    fprintf(stderr,"(argv6) fclen: %s\n",argv[6]);
-    fprintf(stderr,"(argv7) start_date: %s\n",argv[7]);
-    fflush(stderr);
-
-    // Read the exptid, batchid, version, wuid from the command line
-    std::string version = argv[1];
-    std::string exptid = argv[2];
-    std::string unique_member_id = argv[3];
-    std::string batchid = argv[4];
-    std::string wuid = argv[5];
-    std::string fclen = argv[6];
-    std::string start_date = argv[7];
-    OIFS_EXPID = exptid;
-
-    boinc_begin_critical_section();
 
     // Copy the app file to the working directory
     std::string app_target = project_path + std::string("openifs_app_") + version + std::string(".zip");
@@ -435,8 +470,8 @@ int main(int argc, char** argv) {
     boinc_begin_critical_section();
 
     // Make the results folder
-    std::string result_name = std::string("openifs_") + unique_member_id + std::string("_") + start_date + \
-                              std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid;
+//    std::string result_name = std::string("openifs_") + unique_member_id + std::string("_") + start_date + \
+//                              std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid;
 
     // Compile results zip file using BOINC zip
     ZipFileList zfl;
