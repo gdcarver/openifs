@@ -1,7 +1,7 @@
 //
 // Control code for the OpenIFS application in the climateprediction.net project
 //
-// Written by Andy Bowery (Oxford eResearch Centre, Oxford University) March 2019
+// Written by Andy Bowery (Oxford eResearch Centre, Oxford University) February 2019
 //
 
 #include <stdlib.h>
@@ -27,6 +27,7 @@
    #define _MAX_PATH 512
 #endif
 
+const char* stripPath(const char* path);
 int checkChildStatus(long,int);
 int checkBOINCStatus(long,int);
 long launchProcess(const char*,const char*,const char*);
@@ -38,6 +39,9 @@ using namespace std;
 int main(int argc, char** argv) {
     std::string IFSDATA_FILE,IC_ANCIL_FILE,CLIMATE_DATA_FILE,GRID_TYPE,project_path,result_name,version;
     int HORIZ_RESOLUTION,process_running=0,retval=0;
+    char* strFind[5] = {NULL,NULL,NULL,NULL,NULL};
+    char strCpy[5][_MAX_PATH];
+    char strTmp[_MAX_PATH];
     long handleProcess;
     struct dirent *dir;
     regex_t regex;
@@ -110,8 +114,18 @@ int main(int argc, char** argv) {
          return 1;
       }
 
-      // Get the result name
-      result_name = dataBOINC.result_name;
+      // Obtain the name of the result for renaming the upload zip
+      retval = boinc_resolve_filename("upload_file_1.zip",strTmp,_MAX_PATH);
+      if (retval==0) {
+         result_name = stripPath(strTmp);
+         //fprintf(stderr,"strTmp: %s\n",strTmp);
+         //fprintf(stderr,"result_name: %s\n",result_name.c_str());
+      }
+      else {
+         fprintf(stderr, "..Failed to resolve result name\n");
+         return retval;
+      }
+
       fprintf(stderr,"The current version is: %s\n",version.c_str());
       fprintf(stderr,"The current result_name is: %s\n",result_name.c_str());
     }
@@ -124,8 +138,8 @@ int main(int argc, char** argv) {
       // Get the app version and result name
       version = argv[7];
       fprintf(stderr,"(argv7) app_version: %s\n",argv[7]);
-      result_name = std::string("openifs_") + unique_member_id + std::string("_") + start_date + \
-                    std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid + std::string("_0");
+      result_name = std::string("openifs_") + unique_member_id + std::string("_") + start_date + std::string("_") + \
+                    fclen + std::string("_") + batchid + std::string("_") + wuid + std::string("_0") + std::string(".zip");
       fprintf(stderr,"The current result_name is: %s\n",result_name.c_str());
     }
 
@@ -160,9 +174,9 @@ int main(int argc, char** argv) {
 
 
     // Copy the namelist files to the working directory
-    std::string wu_target = project_path + std::string("openifs_wu_") + unique_member_id + std::string("_") + start_date +\
+    std::string wu_target = project_path + std::string("openifs_") + unique_member_id + std::string("_") + start_date +\
                       std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid + std::string(".zip");
-    std::string wu_destination = slot_path + std::string("/openifs_wu_") + unique_member_id + std::string("_") + start_date +\
+    std::string wu_destination = slot_path + std::string("/openifs_") + unique_member_id + std::string("_") + start_date +\
                          std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid + std::string(".zip");
     fprintf(stderr,"Copying the namelist files from: %s to: %s\n",wu_target.c_str(),wu_destination.c_str());
     retval = boinc_copy(wu_target.c_str(),wu_destination.c_str());
@@ -172,7 +186,7 @@ int main(int argc, char** argv) {
     }
 
     // Unzip the namelist zip file
-    std::string namelist_zip = slot_path + std::string("/openifs_wu_") + unique_member_id + std::string("_") + start_date +\
+    std::string namelist_zip = slot_path + std::string("/openifs_") + unique_member_id + std::string("_") + start_date +\
                       std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid + std::string(".zip");
     fprintf(stderr,"Unzipping the namelist zip file: %s\n",namelist_zip.c_str());
     fflush(stderr);
@@ -185,9 +199,6 @@ int main(int argc, char** argv) {
     // Parse the fort.4 namelist for the filenames and variables
     std::string namelist_file = slot_path + std::string("/") + NAMELIST;
     const char strSearch[5][22]={"!IFSDATA_FILE=","!IC_ANCIL_FILE=","!CLIMATE_DATA_FILE=","!HORIZ_RESOLUTION=","!GRID_TYPE="};
-    char* strFind[5] = {NULL,NULL,NULL,NULL,NULL};
-    char strCpy[5][_MAX_PATH];
-    char strTmp[_MAX_PATH];
     memset(strCpy,0x00,5*_MAX_PATH);
     memset(strTmp,0x00,_MAX_PATH);
     FILE* fParse = boinc_fopen(namelist_file.c_str(),"r");
@@ -469,10 +480,6 @@ int main(int argc, char** argv) {
 
     boinc_begin_critical_section();
 
-    // Make the results folder
-//    std::string result_name = std::string("openifs_") + unique_member_id + std::string("_") + start_date + \
-//                              std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid;
-
     // Compile results zip file using BOINC zip
     ZipFileList zfl;
     zfl.clear();
@@ -498,9 +505,9 @@ int main(int argc, char** argv) {
     }
 
     // Create the zipped upload file from the list of files added to zfl
+    std::string upload_results = project_path + result_name;
     if (zfl.size() > 0){
-       std::string strOut = project_path + std::string("/") + result_name + std::string(".zip");
-       retval = boinc_zip(ZIP_IT, strOut.c_str(), &zfl);
+       retval = boinc_zip(ZIP_IT,upload_results.c_str(),&zfl);
        if (retval) {
           fprintf(stderr,"..Creating the zipped upload file failed\n");
           return retval;
@@ -509,8 +516,6 @@ int main(int argc, char** argv) {
 
     // Upload the result file
     fprintf(stderr,"Starting the upload of the result file\n");
-    fflush(stderr);
-    std::string upload_results = project_path + result_name + std::string(".zip");
     fprintf(stderr,"File being uploaded: %s\n",upload_results.c_str());
     fflush(stderr);
     boinc_upload_file(upload_results);
@@ -523,6 +528,14 @@ int main(int argc, char** argv) {
 
     boinc_finish(0);
     return 0;
+}
+
+
+const char* stripPath(const char* path){
+        int jj;
+        for (jj = (int) strlen(path);
+        jj > 0 && path[jj-1] != '/' && path[jj-1] != '\\'; jj--);
+        return (const char*) path+jj;
 }
 
 
