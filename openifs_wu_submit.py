@@ -105,6 +105,9 @@ if __name__ == "__main__":
     print "--------------------------------------"
     print ""
     
+    # Make a temporary directory for reorganising the files required by the workunit
+    os.mkdir(project_dir+"temp")
+    
     # Iterate over the xmlfile in the input directory
     for input_xmlfile in os.listdir(input_directory):
       if input_xmlfile.endswith(".xml"):
@@ -133,6 +136,10 @@ if __name__ == "__main__":
 
           model_config = str(batch.getElementsByTagName('model_config')[0].childNodes[0].nodeValue)
           print "model_config: "+model_config
+
+          fullpos_namelist = project_dir + 'oifs_ancil_files/fullpos_namelist/' + \
+                             str(batch.getElementsByTagName('fullpos_namelist')[0].childNodes[0].nodeValue)
+          print "fullpos_namelist: "+fullpos_namelist
 
           upload_infos = batch.getElementsByTagName('upload_info')
           for upload_info in upload_infos:
@@ -321,9 +328,6 @@ if __name__ == "__main__":
               radiation_zip = str(ifsdata.getElementsByTagName('radiation_zip')[0].childNodes[0].nodeValue)
               SO4_zip = str(ifsdata.getElementsByTagName('SO4_zip')[0].childNodes[0].nodeValue)
 
-            # Make a temporary directory for reorganising the files required by the workunit
-            os.mkdir(project_dir+"temp")
-
             # Copy each of the ifsdata zip files to the temp directory
             copyfile(ancil_file_location+"ifsdata/CFC_files/"+CFC_zip,project_dir+"temp/"+CFC_zip)
             copyfile(ancil_file_location+"ifsdata/radiation_files/"+radiation_zip,project_dir+"temp/"+radiation_zip)
@@ -382,9 +386,6 @@ if __name__ == "__main__":
 
             # Change the working path and delete the temp folder
             os.chdir(project_dir)
-            args = ['rm','-rf','temp']
-            p = subprocess.Popen(args)
-            p.wait()
 
             climate_datas = workunit.getElementsByTagName('climate_data')
             for climate_data in climate_datas:
@@ -420,35 +421,61 @@ if __name__ == "__main__":
                 raise ValueError('Length of simulation (in days) does not divide equally by timestep')
 
             # Read in the namelist template file
-            with open(project_dir+'oifs_workgen/namelist_template_files/'+namelist_template, 'r') as file :
-              template_file = file.read()
+            with open(project_dir+'oifs_workgen/namelist_template_files/'+namelist_template, 'r') as namelist_file :
+              template_file = []
+              for line in namelist_file:
+                # Replace the values
+                line = line.replace('_EXPTID',exptid)
+                line = line.replace('_UNIQUE_MEMBER_ID',unique_member_id)
+                line = line.replace('_IC_ANCIL_FILE',"ic_ancil_"+str(wuid))
+                line = line.replace('_IFSDATA_FILE',"ifsdata_"+str(wuid))
+                line = line.replace('_CLIMATE_DATA_FILE',"clim_data_"+str(wuid))
+                line = line.replace('_HORIZ_RESOLUTION',horiz_resolution)
+                line = line.replace('_GRID_TYPE',grid_type)
+                line = line.replace('_NUM_TIMESTEPS',str(num_timesteps))
+                line = line.replace('_TIMESTEP',timestep)
+                # Remove commented lines
+                if not line.startswith('!!'):
+                  template_file.append(line)
 
-            # Replace the values
-            template_file = template_file.replace('_EXPTID',exptid)
-            template_file = template_file.replace('_UNIQUE_MEMBER_ID',unique_member_id)
-            template_file = template_file.replace('_IC_ANCIL_FILE',"ic_ancil_"+str(wuid))
-            template_file = template_file.replace('_IFSDATA_FILE',"ifsdata_"+str(wuid))
-            template_file = template_file.replace('_CLIMATE_DATA_FILE',"clim_data_"+str(wuid))
-            template_file = template_file.replace('_HORIZ_RESOLUTION',horiz_resolution)
-            template_file = template_file.replace('_GRID_TYPE',grid_type)
-            template_file = template_file.replace('_NUM_TIMESTEPS',str(num_timesteps))
-            template_file = template_file.replace('_TIMESTEP',timestep)
+            # Run dos2unix on the fullpos namelist to eliminate Windows end-of-line characters
+            args = ['dos2unix',fullpos_namelist]
+            p = subprocess.Popen(args)
+            p.wait()
 
-            # Write out the workunit file
+            # Read in the fullpos_namelist
+            with open(fullpos_namelist) as namelist_file_2:
+              fullpos_file = []
+              for line in namelist_file_2:
+                if not line.startswith('!!'):
+                  fullpos_file.append(line)
+
+            # Write out the workunit file, this is a combination of the fullpos and main namelists
             with open('fort.4', 'w') as workunit_file:
-              workunit_file.write(template_file)
+              workunit_file.writelines(fullpos_file)
+              workunit_file.writelines(template_file)
             workunit_file.close()
+
+            # Copy over the wam_namelist
+            args = ['cp',project_dir+'oifs_workgen/namelist_template_files/wam_namelist','.']
+            p = subprocess.Popen(args)
+            p.wait()
 
             # Zip together the fort.4 and wam_namelist files
             zip_file = zipfile.ZipFile(download_dir+workunit_name+'.zip','w')
             zip_file.write('fort.4')
-            zip_file.write(project_dir+'oifs_workgen/namelist_template_files/wam_namelist')
+            zip_file.write('wam_namelist')
             zip_file.close()
+
+            # Remove the copied wam_namelist file
+            args = ['rm','-rf','wam_namelist']
+            p = subprocess.Popen(args)
+            p.wait()
 
             # Remove the fort.4 file
             args = ['rm','-f','fort.4']
             p = subprocess.Popen(args)
-            p.wait()	   
+            p.wait()
 
             # Test whether the workunit_name_zip is present
             try:
@@ -529,8 +556,14 @@ if __name__ == "__main__":
                                                %(wuid,batchid,unique_member_id,workunit_name,start_year,appid)
             cursor.execute(query)
             db.commit()
+            
+            # Remove the contents of the temp directory
+            args = ['rm','-rf','temp/*']
+            p = subprocess.Popen(args)
+            p.wait()
+  
 
-        # Check if class is not openifs
+        # Check if class is openifs
         if not non_openifs_class:
           # Substitute the values of the workunit_range and batchid into the submission XML and write out into the sent folder
           with open(input_directory+'/'+input_xmlfile) as xmlfile:
@@ -561,6 +594,10 @@ if __name__ == "__main__":
           cursor.execute(query)
           db.commit()
 
+    # Delete the temp folder
+    args = ['rm','-rf','temp']
+    p = subprocess.Popen(args)
+    p.wait()
 
     # Close the connection to the secondary database
     cursor.close()
