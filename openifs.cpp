@@ -94,6 +94,13 @@ int main(int argc, char** argv) {
     std::string fclen = argv[6];
     OIFS_EXPID = exptid;
 
+    // Get the slots path (the current working path)
+    char slot_path[_MAX_PATH];
+    if (getcwd(slot_path, sizeof(slot_path)) == NULL)
+      fprintf(stderr,"..getcwd returned an error\n");
+    else
+      fprintf(stderr,"The current working directory is: %s\n",slot_path);
+
     if (!boinc_is_standalone()) {
       // Get the project path
       project_path = dataBOINC.project_dir + std::string("/");
@@ -133,8 +140,9 @@ int main(int argc, char** argv) {
     else {
       fprintf(stderr,"Running in standalone mode\n");
       // Set the project path
-      project_path = "LOCAL_PATH";
-
+      project_path = slot_path + std::string("/../projects/");
+      fprintf(stderr,"Current project directory is: %s\n",project_path.c_str());
+	    
       // Get the app version and result name
       version = argv[7];
       fprintf(stderr,"(argv7) app_version: %s\n",argv[7]);
@@ -144,13 +152,6 @@ int main(int argc, char** argv) {
     }
 
     boinc_begin_critical_section();
-
-    // Get the slots path (the current working path)
-    char slot_path[_MAX_PATH];
-    if (getcwd(slot_path, sizeof(slot_path)) == NULL)
-      fprintf(stderr,"..getcwd returned an error\n");
-    else
-      fprintf(stderr,"The current working directory is: %s\n",slot_path);
 
     // Copy the app file to the working directory
     std::string app_target = project_path + std::string("openifs_app_") + version + std::string(".zip");
