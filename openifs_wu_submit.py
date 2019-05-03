@@ -434,6 +434,7 @@ if __name__ == "__main__":
                 line = line.replace('_GRID_TYPE',grid_type)
                 line = line.replace('_NUM_TIMESTEPS',str(num_timesteps))
                 line = line.replace('_TIMESTEP',timestep)
+                line = line.replace('_ENSEMBLE_MEMBER_NUMBER',str(ensemble_member_number))
                 # Remove commented lines
                 if not line.startswith('!!'):
                   template_file.append(line)
