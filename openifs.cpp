@@ -38,7 +38,7 @@ using namespace std;
 
 int main(int argc, char** argv) {
     std::string IFSDATA_FILE,IC_ANCIL_FILE,CLIMATE_DATA_FILE,GRID_TYPE,project_path,result_name,version;
-    int HORIZ_RESOLUTION,process_running=0,retval=0;
+    int HORIZ_RESOLUTION,process_status,retval=0;
     char* strFind[5] = {NULL,NULL,NULL,NULL,NULL};
     char strCpy[5][_MAX_PATH];
     char strTmp[_MAX_PATH];
@@ -468,15 +468,21 @@ int main(int argc, char** argv) {
     // Start the OpenIFS job
     std::string strCmd = slot_path + std::string("/./master.exe");
     handleProcess = launchProcess(slot_path,strCmd.c_str(),exptid.c_str());
-    if (handleProcess > 0) process_running = 1;
+    if (handleProcess > 0) process_status = 0;
 
     boinc_end_critical_section();
 
+    // process_status = 0 running
+    // process_status = 1 stopped normally
+    // process_status = 2 stopped with quit request from BOINC
+    // process_status = 3 stopped with child process being killed
+    // process_status = 4 stopped with child process being stopped
+	
     // Periodically check the process status and the BOINC client status
-    while (process_running > 0) {
+    while (process_status == 0) {
        sleep_until(system_clock::now() + seconds(1));
-       process_running = checkChildStatus(handleProcess,process_running);
-       process_running = checkBOINCStatus(handleProcess,process_running);
+       process_status = checkChildStatus(handleProcess,process_status);
+       process_status = checkBOINCStatus(handleProcess,process_status);
     }
 
     boinc_begin_critical_section();
@@ -514,21 +520,31 @@ int main(int argc, char** argv) {
           return retval;
        }
     }
+	
+    // if finished normally
+    if (process_status == 1){
+      // Upload the result file
+      fprintf(stderr,"Starting the upload of the result file\n");
+      fprintf(stderr,"File being uploaded: %s\n",upload_results.c_str());
+      fflush(stderr);
+      boinc_upload_file(upload_results);
+      fprintf(stderr,"Finished the upload of the result file\n");
+      fflush(stderr);
+      sleep_until(system_clock::now() + seconds(20));
+      boinc_end_critical_section();
+      boinc_finish(0);
+      return 0;
+    }
+    else if (process_status == 2){
+      boinc_end_critical_section();
+      return 0;
+    }
+    else {
+      boinc_end_critical_section();
+      boinc_finish(1);
+      return 1;
+    }
 
-    // Upload the result file
-    fprintf(stderr,"Starting the upload of the result file\n");
-    fprintf(stderr,"File being uploaded: %s\n",upload_results.c_str());
-    fflush(stderr);
-    boinc_upload_file(upload_results);
-    fprintf(stderr,"Finished the upload of the result file\n");
-    fflush(stderr);
-
-    sleep_until(system_clock::now() + seconds(20));
-
-    boinc_end_critical_section();
-
-    boinc_finish(0);
-    return 0;
 }
 
 
@@ -540,34 +556,37 @@ const char* stripPath(const char* path){
 }
 
 
-int checkChildStatus(long handleProcess, int process_running) {
+int checkChildStatus(long handleProcess, int process_status) {
     int stat;
     //fprintf(stderr,"waitpid: %i\n",waitpid(handleProcess,0,WNOHANG));
 
     // Check whether child processed has exited
     if (waitpid(handleProcess,&stat,WNOHANG)==-1) {
-       process_running = 0;
+       process_status = 1;
        // Child exited normally
        if (WIFEXITED(stat)) {
+	  process_status = 1;
           fprintf(stderr,"The child process terminated with status: %d\n",WEXITSTATUS(stat));
           fflush(stderr);
        }
        // Child process has exited
        else if (WIFSIGNALED(stat)) {
+	  process_status = 3;  
           fprintf(stderr,"..The child process has been killed with signal: %d\n",WTERMSIG(stat));
           fflush(stderr);
        }
        // Child is stopped
        else if (WIFSTOPPED(stat)) {
+	  process_status = 4;
           fprintf(stderr,"..The child process has stopped with signal: %d\n",WSTOPSIG(stat));
           fflush(stderr);
        }
     }
-    return process_running;
+    return process_status;
 }
 
 
-int checkBOINCStatus(long handleProcess, int process_running) {
+int checkBOINCStatus(long handleProcess, int process_status) {
     BOINC_STATUS status;
     boinc_get_status(&status);
 
@@ -576,22 +595,22 @@ int checkBOINCStatus(long handleProcess, int process_running) {
        fprintf(stderr,"Quit request received from BOINC client, ending the child process\n");
        fflush(stderr);
        kill(handleProcess,SIGKILL);
-       process_running = 0;
-       return process_running;
+       process_status = 2;
+       return process_status;
     }
     else if (status.abort_request) {
        fprintf(stderr,"Abort request received from BOINC client, ending the child process\n");
        fflush(stderr);
        kill(handleProcess,SIGKILL);
-       process_running = 0;
-       return process_running;
+       process_status = 1;
+       return process_status;
     }
     else if (status.no_heartbeat) {
        fprintf(stderr,"No heartbeat received from BOINC client, ending the child process\n");
        fflush(stderr);
        kill(handleProcess,SIGKILL);
-       process_running = 0;
-       return process_running;
+       process_status = 1;
+       return process_status;
     }
     // Else if BOINC client is suspended, suspend child process and periodically check BOINC client status
     else {
@@ -606,22 +625,22 @@ int checkBOINCStatus(long handleProcess, int process_running) {
                 fprintf(stderr,"Quit request received from the BOINC client, ending the child process\n");
                 fflush(stderr);
                 kill(handleProcess,SIGKILL);
-                process_running = 0;
-                return process_running;
+                process_status = 2;
+                return process_status;
              }
              else if (status.abort_request) {
                 fprintf(stderr,"Abort request received from the BOINC client, ending the child process\n");
                 fflush(stderr);
                 kill(handleProcess,SIGKILL);
-                process_running = 0;
-                return process_running;
+                process_status = 1;
+                return process_status;
              }
              else if (status.no_heartbeat) {
                 fprintf(stderr,"No heartbeat received from the BOINC client, ending the child process\n");
                 fflush(stderr);
                 kill(handleProcess,SIGKILL);
-                process_running = 0;
-                return process_running;
+                process_status = 1;
+                return process_status;
              }
              sleep_until(system_clock::now() + seconds(1));
           }
@@ -629,9 +648,9 @@ int checkBOINCStatus(long handleProcess, int process_running) {
           fprintf(stderr,"Resuming the child process\n");
           fflush(stderr);
           kill(handleProcess,SIGCONT);
-          process_running = 1;
+          process_status = 0;
        }
-       return process_running;
+       return process_status;
     }
 }
 
