@@ -21,7 +21,7 @@ if __name__ == "__main__":
     print "Application name: "+options.app_name
 
     # Check if a lockfile is present from an ongoing submission
-    lockfile='/tmp/lockfile'
+    lockfile='/tmp/lockfile_workgen'
     print "Waiting for lock...",
     f=open(lockfile,'w')
     fcntl.lockf(f,fcntl.LOCK_EX)
@@ -42,7 +42,8 @@ if __name__ == "__main__":
     max_results_per_workunit = 1
 
     # Set the flops factor
-    flops_factor = 2386500000000
+    #flops_factor = 2386500000000
+    flops_factor = 4388810000000
 
 
     # Parse the project config xml file
@@ -132,6 +133,7 @@ if __name__ == "__main__":
           if model_class != 'openifs': 
             non_openifs_class = True
             print "model class is not openifs, moving on to the next xml file\n"
+            batchid = batchid-1
             break
 
           model_config = str(batch.getElementsByTagName('model_config')[0].childNodes[0].nodeValue)
@@ -209,14 +211,16 @@ if __name__ == "__main__":
             timestep = str(model_config.getElementsByTagName('timestep')[0].childNodes[0].nodeValue)
             timestep_units = str(model_config.getElementsByTagName('timestep_units')[0].childNodes[0].nodeValue)
             namelist_template = str(model_config.getElementsByTagName('namelist_template_global')[0].childNodes[0].nodeValue)
-
+            wam_namelist_template = str(model_config.getElementsByTagName('wam_template_global')[0].childNodes[0].nodeValue)
+            
             #print "horiz_resolution: "+horiz_resolution
             #print "vert_resolution: "+vert_resolution
             #print "grid_type: "+grid_type
             #print "timestep: "+timestep
             #print "timestep_units: "+timestep_units
             print "namelist_template: "+namelist_template
-
+            print "wam_namelist_template: "+wam_namelist_template
+            
           first_wuid = wuid+1
           first_start_year = 9999
           last_start_year = 0
@@ -457,10 +461,19 @@ if __name__ == "__main__":
               workunit_file.writelines(template_file)
             workunit_file.close()
 
-            # Copy over the wam_namelist
-            args = ['cp',project_dir+'oifs_workgen/namelist_template_files/wam_namelist','.']
-            p = subprocess.Popen(args)
-            p.wait()
+            # Read in the wam_namelist template file
+            with open(project_dir+'oifs_workgen/namelist_template_files/'+wam_namelist_template, 'r') as wam_namelist_file :
+              wam_template_file = []
+              for line_2 in wam_namelist_file:
+                # Replace the values
+                line_2 = line_2.replace('_START_DATE',str(start_date))
+                line_2 = line_2.replace('_EXPTID',exptid)
+                wam_template_file.append(line_2)
+
+            # Write out the wam_namelist file
+            with open('wam_namelist', 'w') as wam_file:
+              wam_file.writelines(wam_template_file)
+            wam_file.close()
 
             # Zip together the fort.4 and wam_namelist files
             zip_file = zipfile.ZipFile(download_dir+workunit_name+'.zip','w')
@@ -524,7 +537,7 @@ if __name__ == "__main__":
               "   <command_line> "+str(start_date)+" "+str(exptid)+" "+str(unique_member_id)+" "+str(batchid)+" "+str(wuid)+" "+str(fclen)+"</command_line>\n" +\
               "   <rsc_fpops_est>"+fpops_est+"</rsc_fpops_est>\n" +\
               "   <rsc_fpops_bound>"+fpops_est+"0</rsc_fpops_bound>\n" +\
-              "   <rsc_memory_bound>2000000000</rsc_memory_bound>\n" +\
+              "   <rsc_memory_bound>5368709120</rsc_memory_bound>\n" +\
               "   <rsc_disk_bound>9000000000</rsc_disk_bound>\n" +\
               "   <delay_bound>121.000</delay_bound>\n" +\
               "   <min_quorum>1</min_quorum>\n" +\
@@ -554,7 +567,7 @@ if __name__ == "__main__":
 
             # Enter the details of the submitted workunit into the workunit_table
             query = """insert into WORKUNIT_TABLE(wuid,batch_table,umid,name,start_year,appid) values(%i,%i,'%s','%s',%i,%i)""" \
-                                               %(wuid,batchid,unique_member_id,workunit_name,start_year,appid)
+                                                %(wuid,batchid,unique_member_id,workunit_name,start_year,appid)
             cursor.execute(query)
             db.commit()
             
@@ -586,10 +599,10 @@ if __name__ == "__main__":
 
 
           # Enter the details of the new batch into the batch_table
-          query = """insert into BATCH_TABLE(id,name,description,first_start_year,appid,server_cgi,owner,ul_files,tech_info,\
+          query = """insert into cpdn_batch(name,description,first_start_year,appid,server_cgi,owner,ul_files,tech_info,\
                      umid_start,umid_end,projectid,last_start_year,number_of_workunits,max_results_per_workunit,regionid) \
-                     values(%i,'%s','%s',%i,%i,'%s','%s',%i,'%s','%s','%s',%i,%i,%i,%i,%i);""" \
-                     %(batchid,batch_name,batch_desc,first_start_year,appid,server_cgi,batch_owner,number_of_uploads,tech_info,\
+                     values('%s','%s',%i,%i,'%s','%s',%i,'%s','%s','%s',%i,%i,%i,%i,%i);""" \
+                     %(batch_name,batch_desc,first_start_year,appid,server_cgi,batch_owner,number_of_uploads,tech_info,\
                        umid_start,umid_end,projectid,last_start_year,number_of_workunits,max_results_per_workunit,regionid)
           #print query
           cursor.execute(query)
