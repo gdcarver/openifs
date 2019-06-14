@@ -42,9 +42,7 @@ if __name__ == "__main__":
     max_results_per_workunit = 1
 
     # Set the flops factor
-    #flops_factor = 2386500000000
     flops_factor = 4388810000000
-
 
     # Parse the project config xml file
     xmldoc3 = minidom.parse(project_dir+'config.xml')
@@ -139,8 +137,8 @@ if __name__ == "__main__":
           model_config = str(batch.getElementsByTagName('model_config')[0].childNodes[0].nodeValue)
           print "model_config: "+model_config
 
-          fullpos_namelist = project_dir + 'oifs_ancil_files/fullpos_namelist/' + \
-                             str(batch.getElementsByTagName('fullpos_namelist')[0].childNodes[0].nodeValue)
+          fullpos_namelist_file = str(batch.getElementsByTagName('fullpos_namelist')[0].childNodes[0].nodeValue)
+          fullpos_namelist = project_dir + 'oifs_ancil_files/fullpos_namelist/' + fullpos_namelist_file
           print "fullpos_namelist: "+fullpos_namelist
 
           upload_infos = batch.getElementsByTagName('upload_info')
@@ -565,12 +563,122 @@ if __name__ == "__main__":
             p = subprocess.Popen(args)
             p.wait()
 
+            # Calculate the run_years 
+            if fclen_units == 'days':
+              run_years = 0.00274 * int(fclen)
+            else:
+              run_years = 0
+            
             # Enter the details of the submitted workunit into the workunit_table
-            query = """insert into WORKUNIT_TABLE(wuid,batch_table,umid,name,start_year,appid) values(%i,%i,'%s','%s',%i,%i)""" \
-                                                %(wuid,batchid,unique_member_id,workunit_name,start_year,appid)
+            query = """insert into WORKUNIT_TABLE((wuid,cpdn_batch,umid,name,start_year,run_years,appid) \
+                                                values(%s,%s,'%s','%s',%s,%s,%s)""" \
+                                                %(wuid,batchid,unique_member_id,workunit_name,start_year,run_years,appid)
+
             cursor.execute(query)
             db.commit()
             
+            # Remove the contents of the temp directory
+            args = ['rm','-rf','temp/*']
+            p = subprocess.Popen(args)
+            p.wait()
+            
+            # Enter the fullpos_namelist details of the submitted workunit into the parameter table
+            query = """insert into parameter(paramtypeid,charvalue,submodelid,workunitid) \
+                                             values(%s,'%s',%s,%s)""" \
+                                             %('159',fullpos_namelist_file,'0',wuid)
+            cursor.execute(query)
+            db.commit()
+
+            # Enter the analysis_member_number details of the submitted workunit into the parameter table
+            query = """insert into parameter(paramtypeid,charvalue,submodelid,workunitid) \
+                                             values(%s,'%s',%s,%s)""" \
+                                             %('160',analysis_member_number,'0',wuid)
+            cursor.execute(query)
+            db.commit()
+
+            # Enter the ensemble_member_number details of the submitted workunit into the parameter table
+            query = """insert into parameter(paramtypeid,charvalue,submodelid,workunitid) \
+                                             values(%s,'%s',%s,%s)""" \
+                                             %('161',ensemble_member_number,'0',wuid)
+            cursor.execute(query)
+            db.commit()
+
+            # Enter the fclen details of the submitted workunit into the parameter table
+            query = """insert into parameter(paramtypeid,charvalue,submodelid,workunitid) \
+                                             values(%s,'%s',%s,%s)""" \
+                                             %('162',fclen,'0',wuid)
+            cursor.execute(query)
+            db.commit()
+
+            # Enter the fclen_units details of the submitted workunit into the parameter table
+            query = """insert into parameter(paramtypeid,charvalue,submodelid,workunitid) \
+                                             values(%s,'%s',%s,%s)""" \
+                                             %('163',fclen_units,'0',wuid)
+            cursor.execute(query)
+            db.commit()
+
+            # Enter the start_day details of the submitted workunit into the parameter table
+            query = """insert into parameter(paramtypeid,charvalue,submodelid,workunitid) \
+                                             values(%s,'%s',%s,%s)""" \
+                                             %('164',str(start_day),'0',wuid)
+            cursor.execute(query)
+            db.commit()
+
+            # Enter the start_hour details of the submitted workunit into the parameter table
+            query = """insert into parameter(paramtypeid,charvalue,submodelid,workunitid) \
+                                             values(%s,'%s',%s,%s)""" \
+                                             %('165',str(start_hour),'0',wuid)
+            cursor.execute(query)
+            db.commit()
+
+            # Enter the start_month details of the submitted workunit into the parameter table
+            query = """insert into parameter(paramtypeid,charvalue,submodelid,workunitid) \
+                                             values(%s,'%s',%s,%s)""" \
+                                             %('166',str(start_month),'0',wuid)
+            cursor.execute(query)
+            db.commit()
+            
+            # Enter the start_year details of the submitted workunit into the parameter table
+            query = """insert into parameter(paramtypeid,charvalue,submodelid,workunitid) \
+                                             values(%s,'%s',%s,%s)""" \
+                                             %('167',str(start_year),'0',wuid)
+            cursor.execute(query)
+            db.commit()
+
+            # Enter the ic_ancil_zip details of the submitted workunit into the parameter table
+            query = """insert into parameter(paramtypeid,charvalue,submodelid,workunitid) \
+                                             values(%s,'%s',%s,%s)""" \
+                                             %('168',ic_ancil_zip_in,'0',wuid)
+            cursor.execute(query)
+            db.commit()
+
+            # Enter the CFC_zip details of the submitted workunit into the parameter table
+            query = """insert into parameter(paramtypeid,charvalue,submodelid,workunitid) \
+                                             values(%s,'%s',%s,%s)""" \
+                                             %('169',CFC_zip,'0',wuid)
+            cursor.execute(query)
+            db.commit()
+
+            # Enter the SO4_zip details of the submitted workunit into the parameter table
+            query = """insert into parameter(paramtypeid,charvalue,submodelid,workunitid) \
+                                             values(%s,'%s',%s,%s)""" \
+                                             %('170',SO4_zip,'0',wuid)
+            cursor.execute(query)
+            db.commit()
+
+            # Enter the radiation_zip details of the submitted workunit into the parameter table
+            query = """insert into parameter(paramtypeid,charvalue,submodelid,workunitid) \
+                                             values(%s,'%s',%s,%s)""" \
+                                             %('171',radiation_zip,'0',wuid)
+            cursor.execute(query)
+            db.commit()
+
+            # Enter the climate_data_zip details of the submitted workunit into the parameter table
+            query = """insert into parameter(paramtypeid,charvalue,submodelid,workunitid) \
+                                             values(%s,'%s',%s,%s)""" \
+                                             %('172',climate_data_zip_in,'0',wuid)
+            cursor.execute(query)
+
             # Remove the contents of the temp directory
             args = ['rm','-rf','temp/*']
             p = subprocess.Popen(args)
@@ -597,9 +705,8 @@ if __name__ == "__main__":
           if os.path.exists(project_dir+"oifs_workgen/incoming_xmls/"+str(input_xmlfile)):
             os.remove(project_dir+"oifs_workgen/incoming_xmls/"+str(input_xmlfile))
 
-
           # Enter the details of the new batch into the batch_table
-          query = """insert into cpdn_batch(name,description,first_start_year,appid,server_cgi,owner,ul_files,tech_info,\
+          query = """insert into BATCH_TABLE(name,description,first_start_year,appid,server_cgi,owner,ul_files,tech_info,\
                      umid_start,umid_end,projectid,last_start_year,number_of_workunits,max_results_per_workunit,regionid) \
                      values('%s','%s',%i,%i,'%s','%s',%i,'%s','%s','%s',%i,%i,%i,%i,%i);""" \
                      %(batch_name,batch_desc,first_start_year,appid,server_cgi,batch_owner,number_of_uploads,tech_info,\
@@ -607,7 +714,10 @@ if __name__ == "__main__":
           #print query
           cursor.execute(query)
           db.commit()
-
+        
+    # Change back to the project directory
+    os.chdir(project_dir)
+        
     # Delete the temp folder
     args = ['rm','-rf','temp']
     p = subprocess.Popen(args)
