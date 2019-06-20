@@ -105,7 +105,7 @@ if __name__ == "__main__":
     print ""
     
     # Make a temporary directory for reorganising the files required by the workunit
-    os.mkdir(project_dir+"temp")
+    os.mkdir(project_dir+"temp_openifs_submission_files")
     
     # Iterate over the xmlfile in the input directory
     for input_xmlfile in os.listdir(input_directory):
@@ -343,23 +343,23 @@ if __name__ == "__main__":
               SO4_zip = str(ifsdata.getElementsByTagName('SO4_zip')[0].childNodes[0].nodeValue)
 
             # Copy each of the ifsdata zip files to the temp directory
-            copyfile(ancil_file_location+"ifsdata/CFC_files/"+CFC_zip,project_dir+"temp/"+CFC_zip)
-            copyfile(ancil_file_location+"ifsdata/radiation_files/"+radiation_zip,project_dir+"temp/"+radiation_zip)
-            copyfile(ancil_file_location+"ifsdata/SO4_files/"+SO4_zip,project_dir+"temp/"+SO4_zip)
+            copyfile(ancil_file_location+"ifsdata/CFC_files/"+CFC_zip,project_dir+"temp_openifs_submission_files/"+CFC_zip)
+            copyfile(ancil_file_location+"ifsdata/radiation_files/"+radiation_zip,project_dir+"temp_openifs_submission_files/"+radiation_zip)
+            copyfile(ancil_file_location+"ifsdata/SO4_files/"+SO4_zip,project_dir+"temp_openifs_submission_files/"+SO4_zip)
 
             # Unzip each of the ifsdata files in the temp directory
-            zip_file = zipfile.ZipFile(project_dir+"temp/"+CFC_zip,'r')
-            zip_file.extractall(project_dir+"temp/")
+            zip_file = zipfile.ZipFile(project_dir+"temp_openifs_submission_files/"+CFC_zip,'r')
+            zip_file.extractall(project_dir+"temp_openifs_submission_files/")
             zip_file.close()
-            zip_file = zipfile.ZipFile(project_dir+"temp/"+radiation_zip,'r')
-            zip_file.extractall(project_dir+"temp/")
+            zip_file = zipfile.ZipFile(project_dir+"temp_openifs_submission_files/"+radiation_zip,'r')
+            zip_file.extractall(project_dir+"temp_openifs_submission_files/")
             zip_file.close()
-            zip_file = zipfile.ZipFile(project_dir+"temp/"+SO4_zip,'r')
-            zip_file.extractall(project_dir+"temp/")
+            zip_file = zipfile.ZipFile(project_dir+"temp_openifs_submission_files/"+SO4_zip,'r')
+            zip_file.extractall(project_dir+"temp_openifs_submission_files/")
             zip_file.close()
 
             # Zip together the ifsdata files
-            os.chdir(project_dir+"temp")
+            os.chdir(project_dir+"temp_openifs_submission_files")
             zip_file = zipfile.ZipFile(download_dir+'ifsdata_'+str(wuid)+'.zip','w')
             zip_file.write("C11CLIM")
             zip_file.write("C12CLIM")
@@ -589,11 +589,6 @@ if __name__ == "__main__":
             cursor.execute(query)
             db.commit()
             
-            # Remove the contents of the temp directory
-            args = ['rm','-rf','temp/*']
-            p = subprocess.Popen(args)
-            p.wait()
-            
             # Enter the fullpos_namelist details of the submitted workunit into the parameter table
             query = """insert into parameter(paramtypeid,charvalue,submodelid,workunitid) \
                                              values(%s,'%s',%s,%s)""" \
@@ -690,9 +685,10 @@ if __name__ == "__main__":
                                              values(%s,'%s',%s,%s)""" \
                                              %('172',climate_data_zip_in,'0',wuid)
             cursor.execute(query)
-
-            # Remove the contents of the temp directory
-            args = ['rm','-rf','temp/*']
+            db.commit()
+            
+            # Remove the contents of the temp_openifs_submission_files directory
+            args = ['rm','-rf','temp_openifs_submission_files/*']
             p = subprocess.Popen(args)
             p.wait()
   
@@ -730,8 +726,8 @@ if __name__ == "__main__":
     # Change back to the project directory
     os.chdir(project_dir)
         
-    # Delete the temp folder
-    args = ['rm','-rf','temp']
+    # Delete the temp_openifs_submission_files folder
+    args = ['rm','-rf','temp_openifs_submission_files']
     p = subprocess.Popen(args)
     p.wait()
 
