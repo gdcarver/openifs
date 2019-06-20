@@ -105,7 +105,8 @@ if __name__ == "__main__":
     print ""
     
     # Make a temporary directory for reorganising the files required by the workunit
-    os.mkdir(project_dir+"temp_openifs_submission_files")
+    if not os.path.isdir(project_dir+"temp_openifs_submission_files"):
+      os.mkdir(project_dir+"temp_openifs_submission_files")
     
     # Iterate over the xmlfile in the input directory
     for input_xmlfile in os.listdir(input_directory):
