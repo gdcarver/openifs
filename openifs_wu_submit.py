@@ -238,6 +238,18 @@ if __name__ == "__main__":
             start_year = int(workunit.getElementsByTagName('start_year')[0].childNodes[0].nodeValue)
             unique_member_id = str(workunit.getElementsByTagName('unique_member_id')[0].childNodes[0].nodeValue)
 
+            # This section can be used to resubmit particular workunits from an XML file
+            # To use this, provide a file containing a list of umids that are contained within the XML 
+            # This section will then check whether workunit is in the list and resubmit, and will exit loop if not listed
+            ##umid_present = 0
+            ##with open(project_dir+'oifs_workgen/src/FILE_OF_WORKUNITS_TO_RESEND', 'r') as umids_resubmit:
+            ##  for umid_line in umids_resubmit:
+            ##    if umid_line.rstrip() == str(unique_member_id):
+            ##      print "umid_present"
+            ##      umid_present = 1
+            ##if umid_present == 0:
+            ##  continue
+            
             # Set the first_start_year
             if start_year < first_start_year:
               first_start_year = start_year
@@ -706,10 +718,10 @@ if __name__ == "__main__":
             os.remove(project_dir+"oifs_workgen/incoming_xmls/"+str(input_xmlfile))
 
           # Enter the details of the new batch into the batch_table
-          query = """insert into BATCH_TABLE(name,description,first_start_year,appid,server_cgi,owner,ul_files,tech_info,\
+          query = """insert into BATCH_TABLE(id,name,description,first_start_year,appid,server_cgi,owner,ul_files,tech_info,\
                      umid_start,umid_end,projectid,last_start_year,number_of_workunits,max_results_per_workunit,regionid) \
-                     values('%s','%s',%i,%i,'%s','%s',%i,'%s','%s','%s',%i,%i,%i,%i,%i);""" \
-                     %(batch_name,batch_desc,first_start_year,appid,server_cgi,batch_owner,number_of_uploads,tech_info,\
+                     values(%i,'%s','%s',%i,%i,'%s','%s',%i,'%s','%s','%s',%i,%i,%i,%i,%i);""" \
+                     %(batchid,batch_name,batch_desc,first_start_year,appid,server_cgi,batch_owner,number_of_uploads,tech_info,\
                        umid_start,umid_end,projectid,last_start_year,number_of_workunits,max_results_per_workunit,regionid)
           #print query
           cursor.execute(query)
