@@ -53,6 +53,12 @@ if __name__ == "__main__":
       db_passwd = str(config.getElementsByTagName('db_passwd')[0].childNodes[0].nodeValue)
       db_name = str(config.getElementsByTagName('db_name')[0].childNodes[0].nodeValue)
 
+    # Set batch id prefix, adding a 'd' if a dev batch
+    if db_name == "cpdnboinc_dev" or db == "cpdnboinc_alpha":
+      batch_prefix = "d"
+    elif db_name == "cpdnboinc":
+      batch_prefix = ""
+        
     # Open cursor and connection to primary_db
     db = MySQLdb.connect(db_host,db_user,db_passwd,primary_db,port=33001)
     cursor = db.cursor()
@@ -313,7 +319,7 @@ if __name__ == "__main__":
                start_date = start_date + str(start_hour)
 
             # Set the name of the workunit
-            workunit_name = 'openifs_'+str(unique_member_id)+'_'+str(start_date)+'_'+str(fclen)+'_'+str(batchid)+'_'+str(wuid)
+            workunit_name = 'openifs_'+str(unique_member_id)+'_'+str(start_date)+'_'+str(fclen)+'_'+batch_prefix+str(batchid)+'_'+str(wuid)
 
             # Construct ancil_file_location
             ancil_file_location = project_dir+"oifs_ancil_files/"
@@ -545,7 +551,7 @@ if __name__ == "__main__":
               "     <file_number>3</file_number>\n" +\
               "     <open_name>"+str(climate_data_zip)+"</open_name>\n" +\
               "   </file_ref>\n" +\
-              "   <command_line> "+str(start_date)+" "+str(exptid)+" "+str(unique_member_id)+" "+str(batchid)+" "+str(wuid)+" "+str(fclen)+"</command_line>\n" +\
+              "   <command_line> "+str(start_date)+" "+str(exptid)+" "+str(unique_member_id)+" "+batch_prefix+str(batchid)+" "+str(wuid)+" "+str(fclen)+"</command_line>\n" +\
               "   <rsc_fpops_est>"+fpops_est+"</rsc_fpops_est>\n" +\
               "   <rsc_fpops_bound>"+fpops_est+"0</rsc_fpops_bound>\n" +\
               "   <rsc_memory_bound>5368709120</rsc_memory_bound>\n" +\
