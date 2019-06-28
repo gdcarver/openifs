@@ -31,7 +31,8 @@ if __name__ == "__main__":
     primary_db = <PRIMARY_DATABASE>
     secondary_db = <SECONDARY_DATABASE>
     input_directory = project_dir+ <INCOMING_XML_FOLDER>
-
+    oifs_ancil_dir = <ANCILS_LOCATION> + '/oifs_ancil_files/'
+    
     # Set the regionid as global
     regionid = 15
 
@@ -143,11 +144,11 @@ if __name__ == "__main__":
 
           model_config = str(batch.getElementsByTagName('model_config')[0].childNodes[0].nodeValue)
           print "model_config: "+model_config
-
+        
           fullpos_namelist_file = str(batch.getElementsByTagName('fullpos_namelist')[0].childNodes[0].nodeValue)
-          fullpos_namelist = project_dir + 'oifs_ancil_files/fullpos_namelist/' + fullpos_namelist_file
+          fullpos_namelist = oifs_ancil_dir + 'fullpos_namelist/' + fullpos_namelist_file
           print "fullpos_namelist: "+fullpos_namelist
-
+        
           upload_infos = batch.getElementsByTagName('upload_info')
           for upload_info in upload_infos:
             upload_handler = str(upload_info.getElementsByTagName('upload_handler')[0].childNodes[0].nodeValue)
@@ -322,12 +323,12 @@ if __name__ == "__main__":
             workunit_name = 'openifs_'+str(unique_member_id)+'_'+str(start_date)+'_'+str(fclen)+'_'+batch_prefix+str(batchid)+'_'+str(wuid)
 
             # Construct ancil_file_location
-            ancil_file_location = project_dir+"oifs_ancil_files/"
-            ic_ancil_location = project_dir+"oifs_ancil_files/ic_ancil/"+str(exptid)+"/"+str(start_date)+"/"+str(analysis_member_number)+"/"
-
+            ancil_file_location = oifs_ancil_dir
+            ic_ancil_location = oifs_ancil_dir +"ic_ancil/"+str(exptid)+"/"+str(start_date)+"/"+str(analysis_member_number)+"/"
+           
             ic_ancils = workunit.getElementsByTagName('ic_ancil')
             for ic_ancil in ic_ancils:
-                ic_ancil_zip_in = str(ic_ancil.getElementsByTagName('ic_ancil_zip')[0].childNodes[0].nodeValue)
+              ic_ancil_zip_in = str(ic_ancil.getElementsByTagName('ic_ancil_zip')[0].childNodes[0].nodeValue)
 
             # Test whether the ic_ancil_zip is present
             try:
