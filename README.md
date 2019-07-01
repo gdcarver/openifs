@@ -6,7 +6,7 @@ To compile the controlling code you will need to download and build the BOINC co
 
 To compile the controller code on a Linux machine:
 
-g++ openifs.cpp -I./boinc -I./boinc/lib -L./boinc/api -L./boinc/lib -L./boinc/zip -lboinc_api -lboinc -lboinc_zip -pthread -std=gnu++17 -o openifs_0.1_x86_64-pc-linux-gnu
+g++ openifs.cpp -I./boinc -I./boinc/lib -L./boinc/api -L./boinc/lib -L./boinc/zip -lboinc_api -lboinc -lboinc_zip -static -pthread -std=gnu++17 -o openifs_0.1_x86_64-pc-linux-gnu
 
 This will create an executable that is the app imported into the BOINC environment alongside the OpenIFS executable. Now to run this the OpenIFS ancillary files along with the OpenIFS executable will need to be alongside, the command to run this in standalone mode is:
 
