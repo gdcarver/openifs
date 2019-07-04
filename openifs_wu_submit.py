@@ -55,7 +55,7 @@ if __name__ == "__main__":
       db_name = str(config.getElementsByTagName('db_name')[0].childNodes[0].nodeValue)
 
     # Set batch id prefix, adding a 'd' if a dev batch
-    if db_name == "cpdnboinc_dev" or db == "cpdnboinc_alpha":
+    if db_name == "cpdnboinc_dev" or db_name == "cpdnboinc_alpha":
       batch_prefix = "d"
     elif db_name == "cpdnboinc":
       batch_prefix = ""
