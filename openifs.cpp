@@ -174,9 +174,12 @@ int main(int argc, char** argv) {
     }
 
 
+    // Process the Namelist/workunit file:
+    // Get the name of the 'jf_' filename from a link within the namelist file
+    std::string wu_target = getTag(project_path + std::string("openifs_") + unique_member_id + std::string("_") + start_date +\
+                      std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid + std::string(".zip"));
+
     // Copy the namelist files to the working directory
-    std::string wu_target = project_path + std::string("openifs_") + unique_member_id + std::string("_") + start_date +\
-                      std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid + std::string(".zip");
     std::string wu_destination = slot_path + std::string("/openifs_") + unique_member_id + std::string("_") + start_date +\
                          std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid + std::string(".zip");
     fprintf(stderr,"Copying the namelist files from: %s to: %s\n",wu_target.c_str(),wu_destination.c_str());
@@ -289,9 +292,13 @@ int main(int argc, char** argv) {
        }
        fclose(fParse);
     }
+	
+	
+    // Process the IC_ANCIL_FILE:
+    // Get the name of the 'jf_' filename from a link within the IC_ANCIL_FILE
+    std::string ic_ancil_target = getTag(project_path + IC_ANCIL_FILE + std::string(".zip"));
 
     // Copy the IC ancils to working directory
-    std::string ic_ancil_target = project_path + IC_ANCIL_FILE + std::string(".zip");
     std::string ic_ancil_destination = slot_path + std::string("/") + IC_ANCIL_FILE + std::string(".zip");
     fprintf(stderr,"Copying IC ancils from: %s to: %s\n",ic_ancil_target.c_str(),ic_ancil_destination.c_str());
     retval = boinc_copy(ic_ancil_target.c_str(),ic_ancil_destination.c_str());
@@ -311,12 +318,15 @@ int main(int argc, char** argv) {
     }
 
 
+    // Process the IFSDATA_FILE:
     // Make the ifsdata directory
     std::string ifsdata_folder = slot_path + std::string("/ifsdata");
     if (mkdir(ifsdata_folder.c_str(),S_IRWXU|S_IRWXG|S_IROTH|S_IXOTH) != 0) fprintf(stderr,"..mkdir for ifsdata folder failed\n");
 
+    // Get the name of the 'jf_' filename from a link within the IFSDATA_FILE
+    std::string ifsdata_target = getTag(project_path + IFSDATA_FILE + std::string(".zip"));
+
     // Copy the IFSDATA_FILE to working directory
-    std::string ifsdata_target = project_path + IFSDATA_FILE + std::string(".zip");
     std::string ifsdata_destination = slot_path + std::string("/ifsdata/") + IFSDATA_FILE + std::string(".zip");
     fprintf(stderr,"Copying IFSDATA_FILE from: %s to: %s\n",ifsdata_target.c_str(),ifsdata_destination.c_str());
     retval = boinc_copy(ifsdata_target.c_str(),ifsdata_destination.c_str());
@@ -335,15 +345,18 @@ int main(int argc, char** argv) {
        return retval;
     }
 
-
+	
+    // Process the CLIMATE_DATA_FILE:
     // Make the climate data directory
     std::string climate_data_path = slot_path + std::string("/") + \
                        std::to_string(HORIZ_RESOLUTION) + std::string(GRID_TYPE);
     if (mkdir(climate_data_path.c_str(),S_IRWXU|S_IRWXG|S_IROTH|S_IXOTH) != 0) \
                        fprintf(stderr,"..mkdir for the climate data folder failed\n");
 
+    // Get the name of the 'jf_' filename from a link within the CLIMATE_DATA_FILE
+    std::string climate_data_target = getTag(project_path + CLIMATE_DATA_FILE + std::string(".zip"));
+
     // Copy the climate data file to working directory
-    std::string climate_data_target = project_path + CLIMATE_DATA_FILE + std::string(".zip");
     std::string climate_data_destination = slot_path + std::string("/") + \
                                            std::to_string(HORIZ_RESOLUTION) + std::string(GRID_TYPE) + \
                                            std::string("/") + CLIMATE_DATA_FILE + std::string(".zip");
@@ -352,7 +365,7 @@ int main(int argc, char** argv) {
     if (retval) {
        fprintf(stderr,"..Copying the climate data file to the working directory failed\n");
        return retval;
-    }
+    }	
 
     // Unzip the climate data zip file
     std::string climate_zip = slot_path + std::string("/") + \
@@ -367,7 +380,8 @@ int main(int argc, char** argv) {
        return retval;
     }
 
-
+	
+    // Set the environmental variables:
     // Set the OIFS_DUMMY_ACTION environmental variable, this controls what OpenIFS does if it goes into a dummy subroutine
     // Possible values are: 'quiet', 'verbose' or 'abort'
     std::string OIFS_var = std::string("OIFS_DUMMY_ACTION=abort");
@@ -432,6 +446,7 @@ int main(int argc, char** argv) {
     pathvar = getenv("OMP_STACKSIZE");
     fprintf(stderr,"The OMP_STACKSIZE environmental variable is: %s\n",pathvar);
 
+	
     // Check for the existence of the namelist
     struct stat buffer;
     if(NAMELIST != "fort.4") {
@@ -487,7 +502,7 @@ int main(int argc, char** argv) {
 
     boinc_begin_critical_section();
 
-    // Compile results zip file using BOINC zip
+    // Create the results zip file using BOINC zip
     ZipFileList zfl;
     zfl.clear();
     std::string node_file = slot_path + std::string("/NODE.001_01");
@@ -705,4 +720,26 @@ long launchProcess(const char* slot_path,const char* strCmd,const char* exptid)
           fflush(stderr);
     }
     return handleProcess;
+}
+
+// Open a file and return the string contained between the arrow tags
+std::string getTag(const std::string &filename)
+{
+    std::ifstream file(filename);
+    if (file.is_open()) {
+       std::string line;
+       while (getline(file, line)) {
+          std::string::size_type start = line.find('>');
+          if (start != line.npos) {
+             std::string::size_type end = line.find('<', start + 1);
+             if (end != line.npos) {
+                ++start;
+                std::string::size_type count = end - start;
+                return line.substr(start, count);
+             }
+          }
+          return "";
+       }
+       file.close();
+    }
 }
