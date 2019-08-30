@@ -193,11 +193,18 @@ if __name__ == "__main__":
             umid_end = str(batch_info.getElementsByTagName('umid_end')[0].childNodes[0].nodeValue)
             umid_start = str(batch_info.getElementsByTagName('umid_start')[0].childNodes[0].nodeValue)
 
+          # Create the batch folder structure in the download directory
+          download_dir = project_dir + "/download/"
+          os.mkdir(download_dir+'batch_'+batch_prefix+str(batchid)+'/')
+          os.mkdir(download_dir+'batch_'+batch_prefix+str(batchid)+'/workunits/')
+          os.mkdir(download_dir+'batch_'+batch_prefix+str(batchid)+'/ancils/')
+            
           # Find the project id
           query = """select id from PROJECT_TABLE where name ='%s'""" %(project_name)
           cursor.execute(query)
           projectid = cursor.fetchone()[0]
 
+          print "batchid: "+batch_prefix+str(batchid)
           print "batch_desc: "+batch_desc
           #print "batch_name: "+batch_name
           print "batch_owner: "+batch_owner
@@ -337,8 +344,7 @@ if __name__ == "__main__":
               print "The following file is not present in the oifs_ancil_files: "+ic_ancil_zip_in
 
             # Change to the download dir and create link to file
-            download_dir = project_dir + "/download/"
-            os.chdir(download_dir)
+            os.chdir(download_dir+'batch_'+batch_prefix+str(batchid)+'/ancils/')
             args = ['ln','-s',ic_ancil_location+str(ic_ancil_zip_in),ic_ancil_zip]
             p = subprocess.Popen(args)
             p.wait()
@@ -368,7 +374,7 @@ if __name__ == "__main__":
 
             # Zip together the ifsdata files
             os.chdir(project_dir+"temp_openifs_submission_files")
-            zip_file = zipfile.ZipFile(download_dir+'ifsdata_'+str(wuid)+'.zip','w')
+            zip_file = zipfile.ZipFile(download_dir+'batch_'+batch_prefix+str(batchid)+'/ancils/ifsdata_'+str(wuid)+'.zip','w')
             zip_file.write("C11CLIM")
             zip_file.write("C12CLIM")
             zip_file.write("C22CLIM")
@@ -406,7 +412,7 @@ if __name__ == "__main__":
             zip_file.write("SO4_OBS1990")
             zip_file.close()
 
-            # Change the working path and delete the temp folder
+            # Change the working path
             os.chdir(project_dir)
 
             climate_datas = workunit.getElementsByTagName('climate_data')
@@ -420,7 +426,7 @@ if __name__ == "__main__":
               print "The following file is not present in the oifs_ancil_files: "+str(climate_data_zip_in)
 
             # Change to the download dir and create link to file
-            os.chdir(download_dir)
+            os.chdir(download_dir+'batch_'+batch_prefix+str(batchid)+'/ancils/')
             args = ['ln','-s',ancil_file_location+"climate_data/"+str(climate_data_zip_in),climate_data_zip]
             p = subprocess.Popen(args)
             p.wait()
@@ -494,7 +500,7 @@ if __name__ == "__main__":
             wam_file.close()
 
             # Zip together the fort.4 and wam_namelist files
-            zip_file = zipfile.ZipFile(download_dir+workunit_name+'.zip','w')
+            zip_file = zipfile.ZipFile(download_dir+'batch_'+batch_prefix+str(batchid)+'/workunits/'+workunit_name+'.zip','w')            
             zip_file.write('fort.4')
             zip_file.write('wam_namelist')
             zip_file.close()
@@ -511,13 +517,13 @@ if __name__ == "__main__":
 
             # Test whether the workunit_name_zip is present
             try:
-              os.path.exists(download_dir+workunit_name+'.zip')
+              os.path.exists(download_dir+'batch_'+batch_prefix+str(batchid)+'/workunits/'+workunit_name+'.zip')
             except OSError:
               print "The following file is not present in the download files: "+workunit_name+'.zip'
 
             # Test whether the ifsdata_zip is present
             try:
-              os.path.exists(download_dir+ifsdata_zip)
+              os.path.exists(download_dir+'batch_'+batch_prefix+str(batchid)+'/ancils/'+ifsdata_zip)
             except OSError:
               print "The following file is not present in the download files: "+ifsdata_zip
 
@@ -556,7 +562,7 @@ if __name__ == "__main__":
               "   <rsc_fpops_est>"+fpops_est+"</rsc_fpops_est>\n" +\
               "   <rsc_fpops_bound>"+fpops_est+"0</rsc_fpops_bound>\n" +\
               "   <rsc_memory_bound>5368709120</rsc_memory_bound>\n" +\
-              "   <rsc_disk_bound>9000000000</rsc_disk_bound>\n" +\
+              "   <rsc_disk_bound>3221225472</rsc_disk_bound>\n" +\
               "   <delay_bound>121.000</delay_bound>\n" +\
               "   <min_quorum>1</min_quorum>\n" +\
               "   <target_nresults>1</target_nresults>\n" +\
@@ -574,10 +580,56 @@ if __name__ == "__main__":
             # Change back the project directory
             os.chdir(project_dir)
 
+            workunit_url = 'http://dev.cpdn.org/download/batch_'+batch_prefix+str(batchid)+'/workunits/'+workunit_name+".zip"
+
+            # Get the md5 checksum of the workunit zip file
+            workunit_zip_cksum = hashlib.md5(open(download_dir+'batch_'+batch_prefix+str(batchid)+'/workunits/'+workunit_name+'.zip','rb').read()).hexdigest()
+            print "workunit_zip_cksum = "+str(workunit_zip_cksum)
+
+            # Calculate the size of the workunit zip in bytes
+            workunit_zip_size = os.path.getsize(download_dir+'batch_'+batch_prefix+str(batchid)+'/workunits/'+workunit_name+'.zip')
+            print "workunit_zip_size = "+str(workunit_zip_size)
+
+
+            ic_ancil_url = 'http://dev.cpdn.org/download/batch_'+batch_prefix+str(batchid)+'/ancils/'+str(ic_ancil_zip)
+
+            # Get the md5 checksum of the ic_ancil zip file
+            ic_ancil_zip_cksum = hashlib.md5(open(download_dir+'batch_'+batch_prefix+str(batchid)+'/ancils/'+str(ic_ancil_zip),'rb').read()).hexdigest()
+            print "ic_ancil_zip_cksum = "+str(ic_ancil_zip_cksum)
+
+            # Calculate the size of the ic_ancil zip in bytes
+            ic_ancil_zip_size = os.path.getsize(download_dir+'batch_'+batch_prefix+str(batchid)+'/ancils/'+str(ic_ancil_zip))
+            print "ic_ancil_zip_size = "+str(ic_ancil_zip_size)
+
+
+            ifsdata_url = 'http://dev.cpdn.org/download/batch_'+batch_prefix+str(batchid)+'/ancils/'+str(ifsdata_zip)
+
+            # Get the md5 checksum of the ifsdata zip file
+            ifsdata_zip_cksum = hashlib.md5(open(download_dir+'batch_'+batch_prefix+str(batchid)+'/ancils/'+str(ifsdata_zip),'rb').read()).hexdigest()
+            print "ifsdata_zip_cksum = "+str(ifsdata_zip_cksum)
+
+            # Calculate the size of the ifsdata zip in bytes
+            ifsdata_zip_size = os.path.getsize(download_dir+'batch_'+batch_prefix+str(batchid)+'/ancils/'+str(ifsdata_zip))
+            print "ifsdata_zip_size = "+str(ifsdata_zip_size)
+
+
+            climate_data_url = 'http://dev.cpdn.org/download/batch_'+batch_prefix+str(batchid)+'/ancils/'+str(climate_data_zip)
+
+            # Get the md5 checksum of the climate_data zip file
+            climate_data_zip_cksum = hashlib.md5(open(download_dir+'batch_'+batch_prefix+str(batchid)+'/ancils/'+str(climate_data_zip),'rb').read()).hexdigest()
+            print "climate_data_zip_cksum = "+str(climate_data_zip_cksum)
+
+            # Calculate the size of the climate_data zip in bytes
+            climate_data_zip_size = os.path.getsize(download_dir+'batch_'+batch_prefix+str(batchid)+'/ancils/'+str(climate_data_zip))
+            print "climate_data_zip_size = "+str(climate_data_zip_size)
+            
             # Run the create_work script to create the workunit
             args = ["./bin/create_work","-appname",str(options.app_name),"-wu_name",str(workunit_name),"-wu_template",\
-                    "templates/"+str(options.app_name)+"_in_"+str(wuid),"-result_template",result_template,workunit_name+".zip",\
-                     str(ic_ancil_zip),str(ifsdata_zip),str(climate_data_zip)]
+                    "templates/"+str(options.app_name)+"_in_"+str(wuid),"-result_template",result_template,\
+                    "-remote_file",str(workunit_url),str(workunit_zip_size),str(workunit_zip_cksum),\
+                    "-remote_file",str(ic_ancil_url),str(ic_ancil_zip_size),str(ic_ancil_zip_cksum),\
+                    "-remote_file",str(ifsdata_url),str(ifsdata_zip_size),str(ifsdata_zip_cksum),\
+                    "-remote_file",str(climate_data_url),str(climate_data_zip_size),str(climate_data_zip_cksum)]
             #print args
             time.sleep(2)
             p = subprocess.Popen(args)
