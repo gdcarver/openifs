@@ -1,7 +1,7 @@
 //
 // Control code for the OpenIFS application in the climateprediction.net project
 //
-// Written by Andy Bowery (Oxford eResearch Centre, Oxford University) February 2019
+// Written by Andy Bowery (Oxford eResearch Centre, Oxford University) August 2019
 //
 
 #include <stdlib.h>
@@ -31,6 +31,7 @@ const char* stripPath(const char* path);
 int checkChildStatus(long,int);
 int checkBOINCStatus(long,int);
 long launchProcess(const char*,const char*,const char*);
+std::string getTag(const std::string &str);
 
 using namespace std::chrono;
 using namespace std::this_thread;
@@ -40,12 +41,14 @@ int main(int argc, char** argv) {
     std::string IFSDATA_FILE,IC_ANCIL_FILE,CLIMATE_DATA_FILE,GRID_TYPE,project_path,result_name,version;
     int HORIZ_RESOLUTION,process_status,retval=0;
     char* strFind[5] = {NULL,NULL,NULL,NULL,NULL};
-    char strCpy[5][_MAX_PATH];
-    char strTmp[_MAX_PATH];
-    long handleProcess;
-    struct dirent *dir;
-    regex_t regex;
+    char strCpy[5][_MAX_PATH],strTmp[_MAX_PATH];
     char *pathvar;
+    long handleProcess;
+    double tv_sec,tv_usec,cpu_time,fraction_done;
+    float time_per_fclen;
+    struct dirent *dir;
+    struct rusage usage;
+    regex_t regex;
     DIR *dirp;
 
     // Set defaults for input arguments
@@ -176,7 +179,7 @@ int main(int argc, char** argv) {
 
     // Process the Namelist/workunit file:
     // Get the name of the 'jf_' filename from a link within the namelist file
-    std::string wu_target = getTag(project_path + std::string("openifs_") + unique_member_id + std::string("_") + start_date +\
+    std::string wu_target = getTag(slot_path + std::string("/openifs_") + unique_member_id + std::string("_") + start_date +\
                       std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid + std::string(".zip"));
 
     // Copy the namelist files to the working directory
@@ -296,7 +299,7 @@ int main(int argc, char** argv) {
 	
     // Process the IC_ANCIL_FILE:
     // Get the name of the 'jf_' filename from a link within the IC_ANCIL_FILE
-    std::string ic_ancil_target = getTag(project_path + IC_ANCIL_FILE + std::string(".zip"));
+    std::string ic_ancil_target = getTag(slot_path + std::string("/") + IC_ANCIL_FILE + std::string(".zip"));
 
     // Copy the IC ancils to working directory
     std::string ic_ancil_destination = slot_path + std::string("/") + IC_ANCIL_FILE + std::string(".zip");
@@ -324,7 +327,7 @@ int main(int argc, char** argv) {
     if (mkdir(ifsdata_folder.c_str(),S_IRWXU|S_IRWXG|S_IROTH|S_IXOTH) != 0) fprintf(stderr,"..mkdir for ifsdata folder failed\n");
 
     // Get the name of the 'jf_' filename from a link within the IFSDATA_FILE
-    std::string ifsdata_target = getTag(project_path + IFSDATA_FILE + std::string(".zip"));
+    std::string ifsdata_target = getTag(slot_path + std::string("/") + IFSDATA_FILE + std::string(".zip"));
 
     // Copy the IFSDATA_FILE to working directory
     std::string ifsdata_destination = slot_path + std::string("/ifsdata/") + IFSDATA_FILE + std::string(".zip");
@@ -354,7 +357,7 @@ int main(int argc, char** argv) {
                        fprintf(stderr,"..mkdir for the climate data folder failed\n");
 
     // Get the name of the 'jf_' filename from a link within the CLIMATE_DATA_FILE
-    std::string climate_data_target = getTag(project_path + CLIMATE_DATA_FILE + std::string(".zip"));
+    std::string climate_data_target = getTag(slot_path + std::string("/") + CLIMATE_DATA_FILE + std::string(".zip"));
 
     // Copy the climate data file to working directory
     std::string climate_data_destination = slot_path + std::string("/") + \
@@ -493,9 +496,30 @@ int main(int argc, char** argv) {
     // process_status = 3 stopped with child process being killed
     // process_status = 4 stopped with child process being stopped
 	
+    cpu_time = 0;
+    fraction_done = 0;
+    time_per_fclen = 0.27;	
+	
     // Periodically check the process status and the BOINC client status
     while (process_status == 0) {
        sleep_until(system_clock::now() + seconds(1));
+	    
+       // Calculate the fraction done
+       getrusage(RUSAGE_SELF,&usage); //Return resource usage measurement
+       tv_sec = usage.ru_utime.tv_sec; //Time spent executing in user mode (seconds)
+       tv_usec = usage.ru_utime.tv_usec; //Time spent executing in user mode (microseconds)
+       cpu_time = tv_sec+(tv_usec/1000000); //Convert to seconds
+       fraction_done = (cpu_time-0.96)/(time_per_fclen*atoi(fclen.c_str()));
+
+       //fprintf(stderr,"tv_sec: %.5f\n",tv_sec);
+       //fprintf(stderr,"tv_usec: %.5f\n",(tv_usec/1000000));
+       //fprintf(stderr,"cpu_time: %1.5f\n",cpu_time);
+       //fprintf(stderr,"fraction_done: %.6f\n",fraction_done);
+
+       // Provide the fraction done to the BOINC client, 
+       // this is necessary for the percentage bar on the client
+       boinc_fraction_done(fraction_done);
+	    
        process_status = checkChildStatus(handleProcess,process_status);
        process_status = checkBOINCStatus(handleProcess,process_status);
     }
