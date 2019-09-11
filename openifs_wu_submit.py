@@ -7,7 +7,7 @@
 if __name__ == "__main__":
 
     #import fileinput
-    import os, zipfile, shutil, datetime, calendar, math, MySQLdb, fcntl
+    import os, zipfile, shutil, datetime, calendar, math, MySQLdb, fcntl, hashlib
     import json, argparse, os, subprocess, time, sys, xml.etree.ElementTree as ET
     from email.mime.text import MIMEText
     from subprocess import Popen, PIPE
@@ -138,7 +138,7 @@ if __name__ == "__main__":
           non_openifs_class = False
           if model_class != 'openifs': 
             non_openifs_class = True
-            print "model class is not openifs, moving on to the next xml file\n"
+            print "The model class of the XML is not openifs, so moving on to the next XML file\n"
             batchid = batchid-1
             break
 
@@ -288,8 +288,8 @@ if __name__ == "__main__":
             print "--------------------------------------"
             print "wuid:" +str(wuid)
             print "batchid: "+str(batchid)
-            #print "analysis_member_number: "+analysis_member_number
-            #print "ensemble_member_number: "+ensemble_member_number
+            print "analysis_member_number: "+analysis_member_number
+            print "ensemble_member_number: "+ensemble_member_number
             #print "exptid: "+exptid
             #print "fclen: "+fclen
             #print "fclen_units: "+fclen_units
@@ -375,6 +375,7 @@ if __name__ == "__main__":
             # Zip together the ifsdata files
             os.chdir(project_dir+"temp_openifs_submission_files")
             zip_file = zipfile.ZipFile(download_dir+'batch_'+batch_prefix+str(batchid)+'/ancils/ifsdata_'+str(wuid)+'.zip','w')
+ 
             zip_file.write("C11CLIM")
             zip_file.write("C12CLIM")
             zip_file.write("C22CLIM")
@@ -566,8 +567,8 @@ if __name__ == "__main__":
               "   <delay_bound>121.000</delay_bound>\n" +\
               "   <min_quorum>1</min_quorum>\n" +\
               "   <target_nresults>1</target_nresults>\n" +\
-              "   <max_error_results>2</max_error_results>\n" +\
-              "   <max_total_results>2</max_total_results>\n" +\
+              "   <max_error_results>1</max_error_results>\n" +\
+              "   <max_total_results>1</max_total_results>\n" +\
               "   <max_success_results>1</max_success_results>\n" +\
               "</workunit>\n"+\
               "</input_template>"
@@ -645,7 +646,6 @@ if __name__ == "__main__":
             query = """insert into WORKUNIT_TABLE((wuid,cpdn_batch,umid,name,start_year,run_years,appid) \
                                                 values(%s,%s,'%s','%s',%s,%s,%s)""" \
                                                 %(wuid,batchid,unique_member_id,workunit_name,start_year,run_years,appid)
-
             cursor.execute(query)
             db.commit()
             
