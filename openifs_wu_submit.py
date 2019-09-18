@@ -42,8 +42,8 @@ if __name__ == "__main__":
     # Set the max_results_per_workunit
     max_results_per_workunit = 1
 
-    # Set the flops factor
-    flops_factor = 4388810000000
+    # Set the flops factor (for the progress bar)
+    flops_factor = 1078000000000
 
     # Parse the project config xml file
     xmldoc3 = minidom.parse(project_dir+'config.xml')
