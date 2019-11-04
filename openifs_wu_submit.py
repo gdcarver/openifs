@@ -8,7 +8,7 @@ if __name__ == "__main__":
 
     #import fileinput
     import os, zipfile, shutil, datetime, calendar, math, MySQLdb, fcntl, hashlib
-    import json, argparse, os, subprocess, time, sys, xml.etree.ElementTree as ET
+    import json, argparse, subprocess, time, sys, xml.etree.ElementTree as ET
     from email.mime.text import MIMEText
     from subprocess import Popen, PIPE
     from xml.dom import minidom
