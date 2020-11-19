@@ -767,3 +767,70 @@ std::string getTag(const std::string &filename)
        file.close();
     }
 }
+
+// Alternative method to unzip a folder 
+int unzip_file(const char *file_name)
+{
+    struct zip *opened_file;
+    struct zip_file *zf;
+    struct zip_stat zip_position;
+    char buf[100];
+    int err,i,len,fd;
+    long long sum;
+
+    int retval = 0;
+
+    fprintf(stderr,"Unzipping file: %s\n",file_name);
+    if ((opened_file = zip_open(file_name, 0, &err)) == NULL) {
+       fprintf(stderr,"..Cannot open zip file: %s\n",file_name);
+       retval=1;
+    }
+
+    for (i = 0; i < zip_get_num_entries(opened_file,0); i++) {
+       if (zip_stat_index(opened_file,i,0,&zip_position) == 0) {
+          len = strlen(zip_position.name);
+
+          if (zip_position.name[len - 1] == '/') {
+             if (mkdir(zip_position.name, 0755) < 0) {
+                fprintf(stderr, "..Failed to create directory: %s\n",zip_position.name);
+                retval=1;
+             }
+          } else {
+             zf = zip_fopen_index(opened_file, i, 0);
+             if (!zf) {
+                fprintf(stderr, "..Failed to open zip index\n");
+                retval=1;
+             }
+
+             fd = open(zip_position.name,O_RDWR|O_TRUNC|O_CREAT,0755);
+             if (fd < 0) {
+                fprintf(stderr,"..Failed to open file in zip\n");
+                retval=1;
+             }
+
+             sum = 0;
+             while (sum != zip_position.size) {
+                len = zip_fread(zf, buf, 100);
+                if (len < 0) {
+                   fprintf(stderr,"..File in zip is of zero size\n");
+                   retval=1;
+                }
+                write(fd, buf, len);
+                sum += len;
+             }
+             close(fd);
+             zip_fclose(zf);
+          }
+       } else {
+          fprintf(stderr,"..File %s line %d\n",__FILE__,__LINE__);
+          retval=1;
+       }
+    }   
+
+    if (zip_close(opened_file) == -1) {
+       fprintf(stderr,"..Zip file cannot be closed: %s\n",file_name);
+       retval=1;
+    }
+
+    return retval;
+}
