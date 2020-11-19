@@ -8,9 +8,21 @@ To compile the controller code on a Linux machine:
 
 g++ openifs.cpp -I./boinc -I./boinc/lib -L./boinc/api -L./boinc/lib -L./boinc/zip -lboinc_api -lboinc -lboinc_zip -static -pthread -std=gnu++17 -o openifs_0.1_x86_64-pc-linux-gnu
 
+To compile the controller code on a Mac machine:
+
+First ensure libzip is installed: brew install libzip
+
+Build the BOINC libraries using Xcode. Then build the controller code:
+
+clang++ openifs.cpp -I./boinc -I./boinc/lib -L./boinc/api -L./boinc/lib -L./boinc/zip -lboinc_api -lboinc -lboinc_zip -pthread -std=gnu++17 -o openifs_0.1_x86_64-apple-darwin
+
 This will create an executable that is the app imported into the BOINC environment alongside the OpenIFS executable. Now to run this the OpenIFS ancillary files along with the OpenIFS executable will need to be alongside, the command to run this in standalone mode is:
 
 ./openifs_0.1_x86_64-pc-linux-gnu 2000010100 gw3a 0001 1 00001 1 1.1
+
+Or for macOS:
+
+./openifs_0.1_x86_64-apple-darwin 2000010100 gw3a 0001 1 00001 1 1.1
 
 The command line parameters: [1] compiled executable, [2] start date YYYYMMDDHH, [3] experiment id, [4] unique member id, [5] batch id, [6] workunit id, [7] FCLEN, [8] app version id.
 
