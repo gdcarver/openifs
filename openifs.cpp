@@ -1,7 +1,7 @@
 //
 // Control code for the OpenIFS application in the climateprediction.net project
 //
-// Written by Andy Bowery (Oxford eResearch Centre, Oxford University) August 2019
+// Written by Andy Bowery (Oxford eResearch Centre, Oxford University) December 2020
 //
 
 #include <stdlib.h>
@@ -22,6 +22,9 @@
 #include <sstream>
 #include "./boinc/api/boinc_api.h"
 #include "./boinc/zip/boinc_zip.h"
+#include <signal.h>
+#include <zip.h>
+#include <filesystem>
 
 #ifndef _MAX_PATH
    #define _MAX_PATH 512
@@ -32,16 +35,17 @@ int checkChildStatus(long,int);
 int checkBOINCStatus(long,int);
 long launchProcess(const char*,const char*,const char*);
 std::string getTag(const std::string &str);
+int unzip_file(const char*);
 
 using namespace std::chrono;
 using namespace std::this_thread;
 using namespace std;
 
 int main(int argc, char** argv) {
-    std::string IFSDATA_FILE,IC_ANCIL_FILE,CLIMATE_DATA_FILE,GRID_TYPE,project_path,result_name,version;
-    int HORIZ_RESOLUTION,process_status,retval=0;
-    char* strFind[5] = {NULL,NULL,NULL,NULL,NULL};
-    char strCpy[5][_MAX_PATH],strTmp[_MAX_PATH];
+    std::string IFSDATA_FILE,IC_ANCIL_FILE,CLIMATE_DATA_FILE,GRID_TYPE,TSTEP,NFRPOS,project_path,result_name,version;
+    int HORIZ_RESOLUTION,VERT_RESOLUTION,upload_interval,timestep_interval,ICM_file_interval,process_status,retval=0,i,j;
+    char* strFind[9] = {NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL};
+    char strCpy[9][_MAX_PATH],strTmp[_MAX_PATH];
     char *pathvar;
     long handleProcess;
     double tv_sec,tv_usec,cpu_time,fraction_done;
@@ -56,6 +60,7 @@ int main(int argc, char** argv) {
     int NTHREADS=1;                   // default number ofexi OPENMP threads
     std::string NAMELIST="fort.4";    // NAMELIST file, this name is fixed
 
+    // Initialise BOINC
     boinc_init();
     boinc_parse_init_data_file();
 
@@ -102,9 +107,10 @@ int main(int argc, char** argv) {
     if (getcwd(slot_path, sizeof(slot_path)) == NULL)
       fprintf(stderr,"..getcwd returned an error\n");
     else
-      fprintf(stderr,"The current working directory is: %s\n",slot_path);
+      fprintf(stderr,"Current working directory is: %s\n",slot_path);
 
     if (!boinc_is_standalone()) {
+
       // Get the project path
       project_path = dataBOINC.project_dir + std::string("/");
       fprintf(stderr,"Current project directory is: %s\n",project_path.c_str());
@@ -124,18 +130,6 @@ int main(int argc, char** argv) {
          return 1;
       }
 
-      // Obtain the name of the result for renaming the upload zip
-      retval = boinc_resolve_filename("upload_file_1.zip",strTmp,_MAX_PATH);
-      if (retval==0) {
-         result_name = stripPath(strTmp);
-         //fprintf(stderr,"strTmp: %s\n",strTmp);
-         //fprintf(stderr,"result_name: %s\n",result_name.c_str());
-      }
-      else {
-         fprintf(stderr, "..Failed to resolve result name\n");
-         return retval;
-      }
-
       fprintf(stderr,"The current version is: %s\n",version.c_str());
       fprintf(stderr,"The current result_name is: %s\n",result_name.c_str());
     }
@@ -149,9 +143,6 @@ int main(int argc, char** argv) {
       // Get the app version and result name
       version = argv[7];
       fprintf(stderr,"(argv7) app_version: %s\n",argv[7]);
-      result_name = std::string("openifs_") + unique_member_id + std::string("_") + start_date + std::string("_") + \
-                    fclen + std::string("_") + batchid + std::string("_") + wuid + std::string("_0") + std::string(".zip");
-      fprintf(stderr,"The current result_name is: %s\n",result_name.c_str());
     }
 
     boinc_begin_critical_section();
@@ -189,6 +180,10 @@ int main(int argc, char** argv) {
        fprintf(stderr,"..Unzipping the app file failed\n");
        return retval;
     }
+    // Remove the zip file
+    else {
+       std::filesystem::remove(app_zip);
+    }
 
     // Process the Namelist/workunit file:
     // Get the name of the 'jf_' filename from a link within the namelist file
@@ -199,6 +194,7 @@ int main(int argc, char** argv) {
     std::string wu_destination = slot_path + std::string("/openifs_") + unique_member_id + std::string("_") + start_date +\
                          std::string("_") + fclen + std::string("_") + batchid + std::string("_") + wuid + std::string(".zip");
     fprintf(stderr,"Copying the namelist files from: %s to: %s\n",wu_target.c_str(),wu_destination.c_str());
+
     retval = boinc_copy(wu_target.c_str(),wu_destination.c_str());
     if (retval) {
        fprintf(stderr,"..Copying the namelist files to the working directory failed\n");
@@ -215,11 +211,16 @@ int main(int argc, char** argv) {
        fprintf(stderr,"..Unzipping the namelist file failed\n");
        return retval;
     }
+    // Remove the zip file
+    else {
+       std::filesystem::remove(namelist_zip);
+    }
 
     // Parse the fort.4 namelist for the filenames and variables
     std::string namelist_file = slot_path + std::string("/") + NAMELIST;
-    const char strSearch[5][22]={"!IFSDATA_FILE=","!IC_ANCIL_FILE=","!CLIMATE_DATA_FILE=","!HORIZ_RESOLUTION=","!GRID_TYPE="};
-    memset(strCpy,0x00,5*_MAX_PATH);
+    const char strSearch[9][22]={"!IFSDATA_FILE=","!IC_ANCIL_FILE=","!CLIMATE_DATA_FILE=","!HORIZ_RESOLUTION=",\
+                                 "!VERT_RESOLUTION=","!GRID_TYPE=","!UPLOAD_INTERVAL=","TSTEP=","NFRPOS="};
+    memset(strCpy,0x00,9*_MAX_PATH);
     memset(strTmp,0x00,_MAX_PATH);
     FILE* fParse = boinc_fopen(namelist_file.c_str(),"r");
 
@@ -265,7 +266,31 @@ int main(int argc, char** argv) {
                     strcpy(strCpy[4],strFind[4]);
                 }
             }
-            if (strFind[0]&&strFind[1]&&strFind[2]&&strFind[3]&&strFind[4]) {
+            if (!strFind[5]) {
+                strFind[5] = strstr(strTmp,strSearch[5]);
+                if (strFind[5]) {
+                    strcpy(strCpy[5],strFind[5]);
+                }
+            }
+            if (!strFind[6]) {
+                strFind[6] = strstr(strTmp,strSearch[6]);
+                if (strFind[6]) {
+                    strcpy(strCpy[6],strFind[6]);
+                }
+            }
+            if (!strFind[7]) {
+                strFind[7] = strstr(strTmp,strSearch[7]);
+                if (strFind[7]) {
+                    strcpy(strCpy[7],strFind[7]);
+                }
+            }
+            if (!strFind[8]) {
+                strFind[8] = strstr(strTmp,strSearch[8]);
+                if (strFind[8]) {
+                    strcpy(strCpy[8],strFind[8]);
+                }
+            }
+            if (strFind[0]&&strFind[1]&&strFind[2]&&strFind[3]&&strFind[4]&&strFind[5]&&strFind[6]&&strFind[7]&&strFind[8]) {
                 break;
             }
        }
@@ -300,16 +325,48 @@ int main(int argc, char** argv) {
             fprintf(stderr,"HORIZ_RESOLUTION: %i\n",HORIZ_RESOLUTION);
        }
        if (strCpy[4][0] != 0x00) {
+            VERT_RESOLUTION=atoi(strCpy[4] + strlen(strSearch[4]));
+            fprintf(stderr,"VERT_RESOLUTION: %i\n",VERT_RESOLUTION);
+       }
+       if (strCpy[5][0] != 0x00) {
             memset(strTmp,0x00,_MAX_PATH);
-            strncpy(strTmp,(char*)(strCpy[4] + strlen(strSearch[4])),100);
+            strncpy(strTmp,(char*)(strCpy[5] + strlen(strSearch[5])),100);
             GRID_TYPE = strTmp; 
             while(!GRID_TYPE.empty() && std::isspace(*GRID_TYPE.rbegin())) GRID_TYPE.erase(GRID_TYPE.length()-1);
             fprintf(stderr,"GRID_TYPE: %s\n",GRID_TYPE.c_str());
        }
+       if (strCpy[6][0] != 0x00) {
+            upload_interval=atoi(strCpy[6] + strlen(strSearch[6]));
+            fprintf(stderr,"UPLOAD_INTERVAL: %i\n",upload_interval);
+       }
+       if (strCpy[7][0] != 0x00) {
+            memset(strTmp,0x00,_MAX_PATH);
+            strncpy(strTmp,(char*)(strCpy[7] + strlen(strSearch[7])),100);
+            TSTEP = strTmp; 
+            while(!TSTEP.empty() && \
+                  std::isspace(*TSTEP.rbegin())) TSTEP.erase(TSTEP.length()-1);
+            // Remove the trailing comma
+            if (!TSTEP.empty()) TSTEP.resize(TSTEP.size() - 1);
+            fprintf(stderr,"TSTEP: %s\n",TSTEP.c_str());
+            // Convert to an integer
+            timestep_interval = std::stoi(TSTEP);
+       }
+       if (strCpy[8][0] != 0x00) {
+            memset(strTmp,0x00,_MAX_PATH);
+            strncpy(strTmp,(char*)(strCpy[8] + strlen(strSearch[8])),100);
+            NFRPOS = strTmp; 
+            while(!NFRPOS.empty() && \
+                  std::isspace(*NFRPOS.rbegin())) NFRPOS.erase(NFRPOS.length()-1);
+            // Remove the trailing comma
+            if (!NFRPOS.empty()) NFRPOS.resize(NFRPOS.size() - 1);
+            fprintf(stderr,"NFRPOS: %s\n",NFRPOS.c_str());
+            // Convert to an integer
+            ICM_file_interval = std::stoi(NFRPOS);
+       }
        fclose(fParse);
     }
-	
-	
+
+
     // Process the IC_ANCIL_FILE:
     // Get the name of the 'jf_' filename from a link within the IC_ANCIL_FILE
     std::string ic_ancil_target = getTag(slot_path + std::string("/") + IC_ANCIL_FILE + std::string(".zip"));
@@ -331,6 +388,10 @@ int main(int argc, char** argv) {
     if (retval) {
        fprintf(stderr,"..Unzipping the IC ancils file failed\n");
        return retval;
+    }
+    // Remove the zip file
+    else {
+       std::filesystem::remove(ic_ancil_zip);
     }
 
 
@@ -360,8 +421,12 @@ int main(int argc, char** argv) {
        fprintf(stderr,"..Unzipping the IFSDATA file failed\n");
        return retval;
     }
+    // Remove the zip file
+    else {
+       std::filesystem::remove(ifsdata_zip);
+    }
 
-	
+
     // Process the CLIMATE_DATA_FILE:
     // Make the climate data directory
     std::string climate_data_path = slot_path + std::string("/") + \
@@ -394,6 +459,10 @@ int main(int argc, char** argv) {
     if (retval) {
        fprintf(stderr,"..Unzipping the climate data file failed\n");
        return retval;
+    }
+    // Remove the zip file
+    else {
+       std::filesystem::remove(climate_zip);
     }
 
 	
@@ -485,6 +554,7 @@ int main(int argc, char** argv) {
        fprintf(stderr,"..The namelist file %s does not exist\n",NAMELIST.c_str());
     }
 
+
     // Set the core dump size to 0
     struct rlimit core_limits;
     core_limits.rlim_cur = core_limits.rlim_max = 0;
@@ -492,8 +562,58 @@ int main(int argc, char** argv) {
 
     // Set the stack limit to be unlimited
     struct rlimit stack_limits;
-    stack_limits.rlim_cur = stack_limits.rlim_max = RLIM_INFINITY;
-    if (setrlimit(RLIMIT_STACK, &stack_limits) != 0) fprintf(stderr,"..Setting the stack limit to unlimited failed\n");
+    #ifdef __APPLE__ // macOS
+       stack_limits.rlim_cur = stack_limits.rlim_max = 16000000;   // Set to 16MB
+       if (setrlimit(RLIMIT_STACK, &stack_limits) != 0) fprintf(stderr,"..Setting the stack limit failed\n");
+    #else // Linux
+       stack_limits.rlim_cur = stack_limits.rlim_max = RLIM_INFINITY;
+       if (setrlimit(RLIMIT_STACK, &stack_limits) != 0) fprintf(stderr,"..Setting the stack limit to unlimited failed\n");
+    #endif
+
+
+    cpu_time = 0;
+    fraction_done = 0;
+    time_per_fclen = 0.27;	
+
+    ZipFileList zfl;
+    std::string ifs_line, iter, upload_file_name, ifs_word, second_part;
+    int current_iter=0, count=0, upload_file_number = 1;
+    std::ifstream ifs_stat_file;
+    char upload_file[_MAX_PATH];
+    char result_base_name[64]; 
+    memset(result_base_name, 0x00, sizeof(char) * 64);
+
+    // seconds between upload files: upload_interval
+    // seconds between ICM files: ICM_file_interval * timestep_interval
+    // upload interval in steps = upload_interval / timestep_interval
+
+    //fprintf(stderr,"upload_interval x timestep_interval: %i\n",(upload_interval * timestep_interval));
+
+    // Check if upload_interval x timestep_interval equal to zero
+    if (upload_interval * timestep_interval == 0) {
+       fprintf(stderr,"..upload_interval x timestep_interval equals zero\n");
+       return 1;
+    }
+
+    // time of the last upload file (in seconds)
+    int last_upload = 0;
+
+    int total_length_of_simulation = std::stoi(fclen) * 86400;
+    //fprintf(stderr,"total_length_of_simulation: %i\n",total_length_of_simulation);
+
+    // Get result_base_name to construct upload file names using 
+    // the first upload as an example and then stripping off '_1.zip'
+    if (!boinc_is_standalone()) {
+       memset(strTmp,0x00,_MAX_PATH);
+       retval = boinc_resolve_filename("upload_file_1.zip",strTmp,_MAX_PATH);
+       //fprintf(stderr,"strTmp: %s\n",strTmp);
+       strncpy(result_base_name, stripPath(strTmp), strlen(stripPath(strTmp))-6);
+       //fprintf(stderr,"result_base_name: %s\n",result_base_name);
+       if (retval) {
+          fprintf(stderr,"..Failed to get result name\n");
+          return 1;
+       }
+    }
 
 
     // Start the OpenIFS job
@@ -503,20 +623,176 @@ int main(int argc, char** argv) {
 
     boinc_end_critical_section();
 
+
+    int total_count = 0;
+
     // process_status = 0 running
     // process_status = 1 stopped normally
     // process_status = 2 stopped with quit request from BOINC
     // process_status = 3 stopped with child process being killed
     // process_status = 4 stopped with child process being stopped
-	
-    cpu_time = 0;
-    fraction_done = 0;
-    time_per_fclen = 0.27;	
-	
+
+
     // Periodically check the process status and the BOINC client status
     while (process_status == 0) {
        sleep_until(system_clock::now() + seconds(1));
-	    
+
+       count++;
+       total_count++;
+
+       // Check every 60 seconds whether an upload point has been reached
+       if(count==60) {   
+          if(!(ifs_stat_file.is_open())) {
+             //fprintf(stderr,"Opening ifs.stat file\n");
+             ifs_stat_file.open(slot_path + std::string("/ifs.stat"));
+          }
+
+          // Read last completed ICM file from ifs.stat file
+          while(std::getline(ifs_stat_file, ifs_line)) {  //get 1 row as a string
+             //fprintf(stderr,"Reading ifs.stat file\n");
+             //fflush(stderr);
+
+             std::istringstream iss(ifs_line);  //put line into stringstream
+             int ifs_word_count=0;
+             // Read fourth column from file
+             while(iss >> ifs_word) {  //read word by word
+                ifs_word_count++;
+                if (ifs_word_count==4) iter = ifs_word;
+                //fprintf(stderr,"count: %i\n",ifs_word_count);
+                //fprintf(stderr,"iter: %s\n",iter.c_str());
+             }
+          }
+          // Convert to seconds
+          current_iter = (std::stoi(iter)) * timestep_interval;
+
+          //fprintf(stderr,"Current iteration of model: %s\n",iter.c_str());
+          //fprintf(stderr,"timestep_interval: %i\n",timestep_interval);
+          //fprintf(stderr,"current_iter: %i\n",current_iter);
+          //fprintf(stderr,"last_upload: %i\n",last_upload);
+
+          // Upload a new upload file if the end of an upload_interval has been reached
+          if((( current_iter - last_upload ) >= (upload_interval * timestep_interval)) && (current_iter < total_length_of_simulation)) {
+             // Create an intermediate results zip file using BOINC zip
+             zfl.clear();
+
+             //fprintf(stderr,"total_count: %d\n",total_count);
+
+             boinc_begin_critical_section();
+
+             for (i = (last_upload / timestep_interval); i < (current_iter / timestep_interval); i++) {
+                //fprintf(stderr,"last_upload/timestep_interval: %i\n",(last_upload/timestep_interval));
+                //fprintf(stderr,"current_iter/timestep_interval: %i\n",(current_iter / timestep_interval));
+                //fprintf(stderr,"i: %s\n",(to_string(i)).c_str());
+
+                if (to_string(i).length() == 1) {
+                   second_part = "00000" + to_string(i);
+                }
+                else if (to_string(i).length() == 2) {
+                   second_part = "0000" + to_string(i);
+                }
+                else if (to_string(i).length() == 3) {
+                   second_part = "000" + to_string(i);
+                }
+                else if (to_string(i).length() == 4) {
+                   second_part = "00" + to_string(i);
+                }
+                else if (to_string(i).length() == 5) {
+                   second_part = "0" + to_string(i);
+                }
+                else if (to_string(i).length() == 6) {
+                   second_part = to_string(i);
+                }
+
+                if(std::filesystem::exists(slot_path+std::string("/ICMGG")+exptid+"+"+second_part)) {
+                   fprintf(stderr,"Adding to the zip: %s\n",(slot_path+std::string("/ICMGG")+exptid+"+"+second_part).c_str());
+                   zfl.push_back(slot_path+std::string("/ICMGG")+exptid+"+"+second_part);
+                }
+
+                if(std::filesystem::exists(slot_path+std::string("/ICMSH")+exptid+"+"+second_part)) {
+                   fprintf(stderr,"Adding to the zip: %s\n",(slot_path+std::string("/ICMSH")+exptid+"+"+second_part).c_str());
+                   zfl.push_back(slot_path+std::string("/ICMSH")+exptid+"+"+second_part);
+                }
+             }
+
+             // If running under a BOINC client
+             if (!boinc_is_standalone()) {
+
+                if (zfl.size() > 0){
+
+                   // Create the zipped upload file from the list of files added to zfl
+                   memset(upload_file, 0x00, sizeof(upload_file));
+                   std::sprintf(upload_file,"%s%s_%d.zip",project_path.c_str(),result_base_name,upload_file_number);
+
+                   fprintf(stderr,"Zipping up file: %s\n",upload_file);
+                   retval = boinc_zip(ZIP_IT,upload_file,&zfl);
+
+                   if (retval) {
+                      fprintf(stderr,"..Creating the zipped upload file failed\n");
+                      boinc_end_critical_section();
+                      return retval;
+                   }
+                   else {
+                      // Files have been successfully zipped, they can now be deleted
+                      for (j = 0; j < (int) zfl.size(); ++j) {
+                         // Delete the zipped file
+                         std::filesystem::remove(zfl[j].c_str());
+                      }
+                   }
+                   
+                   // Upload the file. In BOINC the upload file is the logical name, not the physical name
+                   upload_file_name = std::string("upload_file_") + std::to_string(upload_file_number) + std::string(".zip");
+                   fprintf(stderr,"Uploading file: %s\n",upload_file_name.c_str());
+                   fflush(stderr);
+                   sleep_until(system_clock::now() + seconds(20));
+                   boinc_upload_file(upload_file_name);
+                   retval = boinc_upload_status(upload_file_name);
+                   if (retval) {
+                      fprintf(stderr,"Finished the upload of the result file: %s\n",upload_file_name.c_str());
+                      fflush(stderr);
+                   }
+                }
+                boinc_end_critical_section();
+                last_upload = current_iter; 
+             }
+
+             // Else running in standalone
+             else {
+                upload_file_name = std::string("openifs_") + unique_member_id + std::string("_") + start_date + std::string("_") + \
+                              fclen + std::string("_") + batchid + std::string("_") + wuid + std::string("_") + \
+                              to_string(upload_file_number) + std::string(".zip");
+                fprintf(stderr,"The current upload_file_name is: %s\n",upload_file_name.c_str());
+
+                // Create the zipped upload file from the list of files added to zfl
+                memset(upload_file, 0x00, sizeof(upload_file));
+                std::sprintf(upload_file,"%s%s",project_path.c_str(),upload_file_name.c_str());
+                if (zfl.size() > 0){
+                   retval = boinc_zip(ZIP_IT,upload_file,&zfl);
+
+                   if (retval) {
+                      fprintf(stderr,"..Creating the zipped upload file failed\n");
+                      boinc_end_critical_section();
+                      return retval;
+                   }
+                   else {
+                      // Files have been successfully zipped, they can now be deleted
+                      for (j = 0; j < (int) zfl.size(); ++j) {
+                         // Delete the zipped file
+                         std::filesystem::remove(zfl[j].c_str());
+                      }
+                   }
+                }
+                last_upload = current_iter;
+             }
+             boinc_end_critical_section();
+             upload_file_number++;
+          }
+          count = 0;
+
+          // Closing ifs.stat file access
+          ifs_stat_file.close();
+       }
+
+
        // Calculate the fraction done
        getrusage(RUSAGE_SELF,&usage); //Return resource usage measurement
        tv_sec = usage.ru_utime.tv_sec; //Time spent executing in user mode (seconds)
@@ -537,17 +813,19 @@ int main(int argc, char** argv) {
        process_status = checkBOINCStatus(handleProcess,process_status);
     }
 
+
+
     boinc_begin_critical_section();
 
-    // Create the results zip file using BOINC zip
-    ZipFileList zfl;
+    // Create the final results zip file
+
     zfl.clear();
     std::string node_file = slot_path + std::string("/NODE.001_01");
     zfl.push_back(node_file);
     std::string ifsstat_file = slot_path + std::string("/ifs.stat");
     zfl.push_back(ifsstat_file);
 
-    // Read the list of files from the slots directory and add the matching files to the list of files for the zip
+    // Read the remaining list of files from the slots directory and add the matching files to the list of files for the zip
     dirp = opendir(slot_path);
     if (dirp) {
         while ((dir = readdir(dirp)) != NULL) {
@@ -563,26 +841,67 @@ int main(int argc, char** argv) {
         closedir(dirp);
     }
 
-    // Create the zipped upload file from the list of files added to zfl
-    std::string upload_results = project_path + result_name;
-    if (zfl.size() > 0){
-       retval = boinc_zip(ZIP_IT,upload_results.c_str(),&zfl);
-       if (retval) {
-          fprintf(stderr,"..Creating the zipped upload file failed\n");
-          return retval;
+    // If running under a BOINC client
+    if (!boinc_is_standalone()) {
+       if (zfl.size() > 0){
+
+          // Create the zipped upload file from the list of files added to zfl
+          memset(upload_file, 0x00, sizeof(upload_file));
+          std::sprintf(upload_file,"%s%s_%d.zip",project_path.c_str(),result_base_name,upload_file_number);
+
+          fprintf(stderr,"Zipping up file: %s\n",upload_file);
+          retval = boinc_zip(ZIP_IT,upload_file,&zfl);
+
+          if (retval) {
+             fprintf(stderr,"..Creating the zipped upload file failed\n");
+             boinc_end_critical_section();
+             return retval;
+          }
+          else {
+             // Files have been successfully zipped, they can now be deleted
+             for (j = 0; j < (int) zfl.size(); ++j) {
+                // Delete the zipped file
+                std::filesystem::remove(zfl[j].c_str());
+             }
+          }
+
+          // Upload the file. In BOINC the upload file is the logical name, not the physical name
+          upload_file_name = std::string("upload_file_") + std::to_string(upload_file_number) + std::string(".zip");
+          fprintf(stderr,"Uploading file: %s\n",upload_file_name.c_str());
+          fflush(stderr);
+          sleep_until(system_clock::now() + seconds(20));
+          boinc_upload_file(upload_file_name);
+          retval = boinc_upload_status(upload_file_name);
+          if (retval) {
+             fprintf(stderr,"Finished the upload of the result file\n");
+             fflush(stderr);
+          }
        }
+       boinc_end_critical_section();
+       last_upload = current_iter;
+    }
+    // Else running in standalone
+    else {
+       upload_file_name = std::string("openifs_") + unique_member_id + std::string("_") + start_date + std::string("_") + \
+                          fclen + std::string("_") + batchid + std::string("_") + wuid + std::string("_") + \
+                          to_string(upload_file_number) + std::string(".zip");
+       fprintf(stderr,"The file upload_file_name is: %s\n",upload_file_name.c_str());
+
+       // Create the zipped upload file from the list of files added to zfl
+       memset(upload_file, 0x00, sizeof(upload_file));
+       std::sprintf(upload_file,"%s%s",project_path.c_str(),upload_file_name.c_str());
+       if (zfl.size() > 0){
+          retval = boinc_zip(ZIP_IT,upload_file,&zfl);
+          if (retval) {
+             fprintf(stderr,"..Creating the zipped upload file failed\n");
+             boinc_end_critical_section();
+             return retval;
+           }
+        }
     }
 	
     // if finished normally
     if (process_status == 1){
-      // Upload the result file
-      fprintf(stderr,"Starting the upload of the result file\n");
-      fprintf(stderr,"File being uploaded: %s\n",upload_results.c_str());
-      fflush(stderr);
-      boinc_upload_file(upload_results);
-      fprintf(stderr,"Finished the upload of the result file\n");
-      fflush(stderr);
-      sleep_until(system_clock::now() + seconds(20));
       boinc_end_critical_section();
       boinc_finish(0);
       return 0;
@@ -596,15 +915,15 @@ int main(int argc, char** argv) {
       boinc_finish(1);
       return 1;
     }
-
 }
 
 
-const char* stripPath(const char* path){
-        int jj;
-        for (jj = (int) strlen(path);
-        jj > 0 && path[jj-1] != '/' && path[jj-1] != '\\'; jj--);
-        return (const char*) path+jj;
+
+const char* stripPath(const char* path) {
+    int jj;
+    for (jj = (int) strlen(path);
+    jj > 0 && path[jj-1] != '/' && path[jj-1] != '\\'; jj--);
+    return (const char*) path+jj;
 }
 
 
@@ -707,8 +1026,7 @@ int checkBOINCStatus(long handleProcess, int process_status) {
 }
 
 
-long launchProcess(const char* slot_path,const char* strCmd,const char* exptid)
-{
+long launchProcess(const char* slot_path,const char* strCmd,const char* exptid) {
     int retval = 0;
     long handleProcess;
 
@@ -760,8 +1078,7 @@ long launchProcess(const char* slot_path,const char* strCmd,const char* exptid)
 }
 
 // Open a file and return the string contained between the arrow tags
-std::string getTag(const std::string &filename)
-{
+std::string getTag(const std::string &filename) {
     std::ifstream file(filename);
     if (file.is_open()) {
        std::string line;
@@ -782,8 +1099,7 @@ std::string getTag(const std::string &filename)
 }
 
 // Alternative method to unzip a folder 
-int unzip_file(const char *file_name)
-{
+int unzip_file(const char *file_name) {
     struct zip *opened_file;
     struct zip_file *zf;
     struct zip_stat zip_position;
