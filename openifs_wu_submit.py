@@ -36,14 +36,12 @@ if __name__ == "__main__":
     # Set the regionid as global
     regionid = 15
 
-    # Set the number of upload files
-    number_of_uploads = 1
-
     # Set the max_results_per_workunit
     max_results_per_workunit = 1
 
     # Set the flops factor (for the progress bar)
-    flops_factor = 1078000000000
+    flops_factor = 12800000000000
+    # flops_factor = 1078000000000 # Original
 
     # Parse the project config xml file
     xmldoc3 = minidom.parse(project_dir+'config.xml')
@@ -149,40 +147,6 @@ if __name__ == "__main__":
           fullpos_namelist = oifs_ancil_dir + 'fullpos_namelist/' + fullpos_namelist_file
           print "fullpos_namelist: "+fullpos_namelist
         
-          upload_infos = batch.getElementsByTagName('upload_info')
-          for upload_info in upload_infos:
-            upload_handler = str(upload_info.getElementsByTagName('upload_handler')[0].childNodes[0].nodeValue)
-            result_template_prefix = str(upload_info.getElementsByTagName('result_template_prefix')[0].childNodes[0].nodeValue)
-            result_template = result_template_prefix+'_n'+str(number_of_uploads)+'.xml'
-            print "upload_handler: "+upload_handler
-            print "result_template: "+project_dir+result_template
-
-          # If result template does not exist, then create a new template
-          if not (os.path.exists(project_dir+result_template)):
-            output_string="<output_template>\n" +\
-              "<file_info>\n" +\
-              "  <name><OUTFILE_1/>.zip</name>\n" +\
-              "  <generated_locally/>\n" +\
-              "  <max_nbytes>100000000000000</max_nbytes>\n" +\
-              "  <url>"+upload_handler+"</url>\n" +\
-              "</file_info>\n" +\
-              "<result>\n" +\
-              "   <file_ref>\n" +\
-              "     <file_name><OUTFILE_1/>.zip</file_name>\n" +\
-              "     <open_name>upload_file_1.zip</open_name>\n" +\
-              "     <no_delete/>\n" +\
-              "   </file_ref>\n" +\
-              "</result>\n" +\
-              "</output_template>"
-
-            OUTPUT=open(project_dir+result_template,"w")
-            # Create the result_template
-            print >> OUTPUT, output_string
-            OUTPUT.close()
-
-          # Set the server_cgi from the upload_handler string
-          server_cgi = upload_handler[:-19]
-
           batch_infos = batch.getElementsByTagName('batch_info')
           for batch_info in batch_infos:
             batch_desc = str(batch_info.getElementsByTagName('desc')[0].childNodes[0].nodeValue)
@@ -223,6 +187,7 @@ if __name__ == "__main__":
             grid_type = str(model_config.getElementsByTagName('grid_type')[0].childNodes[0].nodeValue)
             timestep = str(model_config.getElementsByTagName('timestep')[0].childNodes[0].nodeValue)
             timestep_units = str(model_config.getElementsByTagName('timestep_units')[0].childNodes[0].nodeValue)
+            upload_frequency = str(model_config.getElementsByTagName('upload_frequency')[0].childNodes[0].nodeValue)
             namelist_template = str(model_config.getElementsByTagName('namelist_template_global')[0].childNodes[0].nodeValue)
             wam_namelist_template = str(model_config.getElementsByTagName('wam_template_global')[0].childNodes[0].nodeValue)
             
@@ -231,6 +196,7 @@ if __name__ == "__main__":
             #print "grid_type: "+grid_type
             #print "timestep: "+timestep
             #print "timestep_units: "+timestep_units
+            #print "upload_frequency: "+upload_frequency
             print "namelist_template: "+namelist_template
             print "wam_namelist_template: "+wam_namelist_template
             
@@ -449,6 +415,71 @@ if __name__ == "__main__":
               if not(isinstance(num_timesteps,int)):
                 raise ValueError('Length of simulation (in days) does not divide equally by timestep')
 
+              # Set upload interval and number of uploads, upload_interval is the number of timesteps between uploads
+              if upload_frequency == 'daily':
+                upload_interval = num_timesteps / int(fclen)
+              elif upload_frequency == 'weekly':
+                upload_interval = (num_timesteps / int(fclen)) * 7
+              elif upload_frequency == 'monthly':
+                upload_interval = (num_timesteps / int(fclen)) * 30
+              elif upload_frequency == 'yearly':
+                upload_interval = (num_timesteps / int(fclen)) * 365
+
+              # Throw an error if not cleanly divisible
+              if not(isinstance(upload_interval,int)):
+                raise ValueError('The number of time steps does not divide equally by the upload frequency')
+              
+            number_of_uploads = num_timesteps / upload_interval
+
+            print "upload_interval: "+str(upload_interval)
+            print "number_of_uploads: "+str(number_of_uploads)
+            
+            # Throw an error if not cleanly divisible
+            if not(isinstance(number_of_uploads,int)):
+              raise ValueError('The total number of timesteps does not divide equally by the upload interval')
+                
+            upload_infos = batch.getElementsByTagName('upload_info')
+            for upload_info in upload_infos:
+              upload_handler = str(upload_info.getElementsByTagName('upload_handler')[0].childNodes[0].nodeValue)
+              result_template_prefix = str(upload_info.getElementsByTagName('result_template_prefix')[0].childNodes[0].nodeValue)
+              result_template = result_template_prefix+'_n'+str(number_of_uploads)+'.xml'
+              #print "upload_handler: "+upload_handler
+              #print "result_template: "+project_dir+result_template
+
+            # If result template does not exist, then create a new template
+            if not (os.path.exists(project_dir+result_template)):
+              output_string="<output_template>\n"
+
+              for upload_iteration in range(number_of_uploads):
+                output_string=output_string+"<file_info>\n" +\
+                "  <name><OUTFILE_"+str(upload_iteration)+"/>.zip</name>\n" +\
+                "  <generated_locally/>\n" +\
+                "  <upload_when_present/>\n" +\
+                "  <max_nbytes>100000000000000</max_nbytes>\n" +\
+                "  <url>"+upload_handler+"</url>\n" +\
+                "</file_info>\n"
+
+              output_string = output_string + "<result>\n"
+
+              for upload_iteration in range(number_of_uploads):
+                output_string=output_string+"   <file_ref>\n" +\
+                "     <file_name><OUTFILE_"+str(upload_iteration)+"/>.zip</file_name>\n" +\
+                "     <open_name>upload_file_"+str(upload_iteration)+".zip</open_name>\n" +\
+                "   </file_ref>\n"
+
+              output_string = output_string + "</result>\n" +\
+                "</output_template>"
+
+              #print "output_string: "+output_string
+
+              OUTPUT=open(project_dir+result_template,"w")
+              # Create the result_template
+              print >> OUTPUT, output_string
+              OUTPUT.close()  
+                
+            # Set the server_cgi from the upload_handler string
+            server_cgi = upload_handler[:-19]  
+                
             # Read in the namelist template file
             with open(project_dir+'oifs_workgen/namelist_template_files/'+namelist_template, 'r') as namelist_file :
               template_file = []
@@ -460,9 +491,11 @@ if __name__ == "__main__":
                 line = line.replace('_IFSDATA_FILE',"ifsdata_"+str(wuid))
                 line = line.replace('_CLIMATE_DATA_FILE',"clim_data_"+str(wuid))
                 line = line.replace('_HORIZ_RESOLUTION',horiz_resolution)
+                line = line.replace('_VERT_RESOLUTION',vert_resolution)
                 line = line.replace('_GRID_TYPE',grid_type)
                 line = line.replace('_NUM_TIMESTEPS',str(num_timesteps))
                 line = line.replace('_TIMESTEP',timestep)
+                line = line.replace('_UPLOAD_INTERVAL',str(upload_interval))
                 line = line.replace('_ENSEMBLE_MEMBER_NUMBER',str(ensemble_member_number))
                 # Remove commented lines
                 if not line.startswith('!!'):
@@ -562,8 +595,8 @@ if __name__ == "__main__":
               "   <command_line> "+str(start_date)+" "+str(exptid)+" "+str(unique_member_id)+" "+batch_prefix+str(batchid)+" "+str(wuid)+" "+str(fclen)+"</command_line>\n" +\
               "   <rsc_fpops_est>"+fpops_est+"</rsc_fpops_est>\n" +\
               "   <rsc_fpops_bound>"+fpops_est+"0</rsc_fpops_bound>\n" +\
-              "   <rsc_memory_bound>5368709120</rsc_memory_bound>\n" +\
-              "   <rsc_disk_bound>3221225472</rsc_disk_bound>\n" +\
+              "   <rsc_memory_bound>12500000000</rsc_memory_bound>\n" +\
+              "   <rsc_disk_bound>4000000000</rsc_disk_bound>\n" +\
               "   <delay_bound>121.000</delay_bound>\n" +\
               "   <min_quorum>1</min_quorum>\n" +\
               "   <target_nresults>1</target_nresults>\n" +\
