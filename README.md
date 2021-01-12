@@ -6,7 +6,9 @@ To compile the controlling code you will need to download and build the BOINC co
 
 To compile the controller code on a Linux machine:
 
-g++ openifs.cpp -I./boinc -I./boinc/lib -L./boinc/api -L./boinc/lib -L./boinc/zip -lboinc_api -lboinc -lboinc_zip -static -pthread -std=gnu++17 -o openifs_0.1_x86_64-pc-linux-gnu
+First ensure that libzip is installed. On an Ubuntu machine do: sudo apt-get install libzip-dev
+
+g++ openifs.cpp -I./boinc -I./boinc/lib -L./boinc/api -L./boinc/lib -L./boinc/zip -lzip -lboinc_api -lboinc -lboinc_zip -static -pthread -std=gnu++17 -o openifs_0.1_x86_64-pc-linux-gnu
 
 To compile the controller code on a Mac machine:
 
