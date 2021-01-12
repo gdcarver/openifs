@@ -24,7 +24,19 @@
 #include "./boinc/zip/boinc_zip.h"
 #include <signal.h>
 #include <zip.h>
-#include <filesystem>
+#include <fcntl.h>
+
+#ifndef __has_include
+   static_assert(false, "__has_include not supported");
+#else
+#  if __has_include(<filesystem>)
+#    include <filesystem>
+     namespace fs = std::filesystem;
+#  elif __has_include(<experimental/filesystem>)
+#    include <experimental/filesystem>
+     namespace fs = std::experimental::filesystem;
+#  endif
+#endif
 
 #ifndef _MAX_PATH
    #define _MAX_PATH 512
@@ -182,7 +194,7 @@ int main(int argc, char** argv) {
     }
     // Remove the zip file
     else {
-       std::filesystem::remove(app_zip);
+       fs::remove(app_zip);
     }
 
     // Process the Namelist/workunit file:
@@ -213,7 +225,7 @@ int main(int argc, char** argv) {
     }
     // Remove the zip file
     else {
-       std::filesystem::remove(namelist_zip);
+       fs::remove(namelist_zip);
     }
 
     // Parse the fort.4 namelist for the filenames and variables
@@ -391,7 +403,7 @@ int main(int argc, char** argv) {
     }
     // Remove the zip file
     else {
-       std::filesystem::remove(ic_ancil_zip);
+       fs::remove(ic_ancil_zip);
     }
 
 
@@ -423,7 +435,7 @@ int main(int argc, char** argv) {
     }
     // Remove the zip file
     else {
-       std::filesystem::remove(ifsdata_zip);
+       fs::remove(ifsdata_zip);
     }
 
 
@@ -462,7 +474,7 @@ int main(int argc, char** argv) {
     }
     // Remove the zip file
     else {
-       std::filesystem::remove(climate_zip);
+       fs::remove(climate_zip);
     }
 
 	
@@ -703,12 +715,12 @@ int main(int argc, char** argv) {
                    second_part = to_string(i);
                 }
 
-                if(std::filesystem::exists(slot_path+std::string("/ICMGG")+exptid+"+"+second_part)) {
+                if(fs::exists(slot_path+std::string("/ICMGG")+exptid+"+"+second_part)) {
                    fprintf(stderr,"Adding to the zip: %s\n",(slot_path+std::string("/ICMGG")+exptid+"+"+second_part).c_str());
                    zfl.push_back(slot_path+std::string("/ICMGG")+exptid+"+"+second_part);
                 }
 
-                if(std::filesystem::exists(slot_path+std::string("/ICMSH")+exptid+"+"+second_part)) {
+                if(fs::exists(slot_path+std::string("/ICMSH")+exptid+"+"+second_part)) {
                    fprintf(stderr,"Adding to the zip: %s\n",(slot_path+std::string("/ICMSH")+exptid+"+"+second_part).c_str());
                    zfl.push_back(slot_path+std::string("/ICMSH")+exptid+"+"+second_part);
                 }
@@ -735,7 +747,7 @@ int main(int argc, char** argv) {
                       // Files have been successfully zipped, they can now be deleted
                       for (j = 0; j < (int) zfl.size(); ++j) {
                          // Delete the zipped file
-                         std::filesystem::remove(zfl[j].c_str());
+                         fs::remove(zfl[j].c_str());
                       }
                    }
                    
@@ -777,7 +789,7 @@ int main(int argc, char** argv) {
                       // Files have been successfully zipped, they can now be deleted
                       for (j = 0; j < (int) zfl.size(); ++j) {
                          // Delete the zipped file
-                         std::filesystem::remove(zfl[j].c_str());
+                         fs::remove(zfl[j].c_str());
                       }
                    }
                 }
@@ -861,7 +873,7 @@ int main(int argc, char** argv) {
              // Files have been successfully zipped, they can now be deleted
              for (j = 0; j < (int) zfl.size(); ++j) {
                 // Delete the zipped file
-                std::filesystem::remove(zfl[j].c_str());
+                fs::remove(zfl[j].c_str());
              }
           }
 
@@ -1098,7 +1110,8 @@ std::string getTag(const std::string &filename) {
     }
 }
 
-// Alternative method to unzip a folder 
+// Alternative method to unzip a folder (macOS only)
+#ifdef __APPLE__ // macOS
 int unzip_file(const char *file_name) {
     struct zip *opened_file;
     struct zip_file *zf;
@@ -1163,3 +1176,4 @@ int unzip_file(const char *file_name) {
 
     return retval;
 }
+#endif
